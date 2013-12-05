@@ -1,0 +1,57 @@
+Introduction
+============
+
+BAT is a small tool to help with automation testing for audio drivers.
+BAT can also mean a small flying mammal with big ears and good hearing OR Basic 
+Audio Tester OR Basic ALSA Tester. Take your pick.
+
+
+Install
+=======
+
+BAT can be installed by running :-
+
+./autogen.sh
+./configure
+make
+make install
+
+
+Usage
+=====
+
+BAT is intended to analyse audio recored in loopback mode for quality and gain
+errors by comparing the captured audio PCM data to the original PCM data.
+
+BAT should be used as follows :-
+
+1) Use arecord and aplay to capture a loopback PCM file e.g.
+
+ arecord -r 44100 -c 1 -f S16_LE > test.wav &
+ aplay sine-997Hz-mono.wav && kill arecord
+
+2) Run the recored sample through. i.e.
+
+  bat -r 44100 -c 1 -s 2 -f 88200 -F 997
+
+Where r is rate, c is channels, s is frame size in bytes, f is frames to read
+and F is target frequency. BAT will return a negative result on any errors.
+
+
+Future Plans
+============
+
+1) Support other sample rates and channels.
+
+2) Add Sine wave generator.
+
+3) Call alsa calls directly so usage step 1 is no longer required.
+
+4) Detect gain changes, i.e. compare max signal against expected max.
+
+5) Test driver loopback stream latency i.e mesure the time it takes to receive
+   samples after playing them.
+
+
+
+
