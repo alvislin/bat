@@ -20,9 +20,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <math.h>
-
 #include <fftw3.h>
+#include <math.h>
+#include <alsa/asoundlib.h>
+#include <alsa/pcm.h>
+
+#define BUFFER_LENGTH 48000
 
 struct bat {
 	int rate;
@@ -71,7 +74,7 @@ static void convert(struct bat *bat)
 		bat->in[i] = s[i];
 }
 
-/* hard coded for rate of 44100Hz atm */
+/* hard coded for rate of 44100 Hz atm */
 static int check(struct bat *bat)
 {
 	float Hz =  2.0 / ((float) bat->frames / (float) bat->rate);
@@ -218,6 +221,46 @@ out:
 	return ret;
 }
 
+int generate_sine(int frequency, int sampling_frequency)
+{
+	static char *device = "default";		//soundcard, to change into parameters?
+	float buffer [BUFFER_LENGTH];
+
+    int err;
+    int k;
+
+    snd_pcm_t *handle;
+
+    // Error Handling
+    if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0)
+	{
+            printf("Playback open error: %s\n", snd_strerror(err));
+            exit(EXIT_FAILURE);
+    }
+
+	if ((err = snd_pcm_set_params(handle,
+                                  SND_PCM_FORMAT_FLOAT,
+                                  SND_PCM_ACCESS_RW_INTERLEAVED,
+                                  1,
+                                  48000,
+                                  1,
+                                  500000)) < 0) 
+	{
+			printf("Playback open error: %s\n", snd_strerror(err));
+			exit(EXIT_FAILURE);
+    }
+
+	// Sine wave value generation
+	for (k = 0 ; k < BUFFER_LENGTH ; k++)
+	{
+		buffer[k] = (sin(k * 2 * M_PI * frequency / sampling_frequency));
+	}
+	
+	snd_pcm_writei(handle, buffer, BUFFER_LENGTH);						// Send values to sound driver
+	snd_pcm_close(handle);
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	struct bat bat;
@@ -226,7 +269,7 @@ int main(int argc, char *argv[])
 
 	memset(&bat, 0, sizeof(bat));
 
-	/* default values */
+	/* Set default values */
 	bat.rate = 44100;
 	bat.channels = 1;
 	bat.frame_size = 2;
@@ -234,7 +277,7 @@ int main(int argc, char *argv[])
 	bat.target_freq = 997.0;
 	bat.sigma_k = 3.0;
 
-	/* parse options */
+	/* Parse options */
 	while ((opt = getopt(argc, argv, "hf:s:n:F:c:r:k:")) != -1) {
 		switch (opt) {
 		case 'f':
@@ -246,7 +289,7 @@ int main(int argc, char *argv[])
 		case 'F':
 			bat.target_freq = atof(optarg);
 			break;
-		case 'c': /* ignored atm - to be implemeted */
+		case 'c': /* ignored atm - to be implemented */
 			bat.channels = atoi(optarg);
 			break;
 		case 'r':
@@ -263,10 +306,17 @@ int main(int argc, char *argv[])
 			usage(argv);
 		}
 	}
-
-	fprintf(stdout, "BAT input is %d frames at %dHz, %d channels, frame size %d bytes\n",
+	
+	// Sine generation
+    fprintf(stdout, "Sine tone at %2.2f Hz, sampling frequency is %i Hz\n",
+		bat.target_freq, bat.rate);
+	generate_sine(bat.target_freq, bat.rate);
+	fprintf(stdout, "Sine generation ended\n");
+	
+	
+	fprintf(stdout, "BAT input is %d frames at %d Hz, %d channels, frame size %d bytes\n",
 		bat.frames, bat.rate, bat.channels, bat.frame_size);
-	fprintf(stdout, "BAT Checking for target frequency %2.2fHz\n",
+	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n",
 		bat.target_freq);
  
 	ret = file_load(&bat, file);
