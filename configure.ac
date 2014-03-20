@@ -59,6 +59,7 @@ AC_FUNC_REALLOC
 AC_CHECK_FUNCS([memset], , [AC_MSG_ERROR([Error: need memset])])
 AC_CHECK_LIB([fftw3], [fftw_malloc], , [AC_MSG_ERROR([Error: need FFTW3 library])])
 AC_CHECK_LIB([m], [sqrt], , [AC_MSG_ERROR([Error: Need sqrt])])
+AC_CHECK_LIB([asound], [snd_pcm_open], , [AC_MSG_ERROR([Error: need ASOUND library])])
 
 # Debug symbol support
 AC_ARG_ENABLE(debug, [AS_HELP_STRING([--enable-debug],[enable debug symbols])],

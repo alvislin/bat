@@ -123,7 +123,10 @@ static int check(struct bat *bat)
 				fprintf(stdout, " Total %3.1f dB from %2.2f to %2.2f Hz\n",
 					10.0 * log10(p / mean),
 					(start + 1) * Hz, (end + 1) * Hz);
-				if ((peak + 1) * Hz < bat->target_freq - 1.0) {
+				if ((peak + 1) > 3.99 && (peak + 1) < 4.01) {
+					fprintf(stdout, "Warning: there is too low peak %2.2f Hz, very close to DC\n", 
+						(peak + 1) * Hz);
+				} else if ((peak + 1) * Hz < bat->target_freq - 1.0) {
 					fprintf(stdout, " Peak too low %2.2f Hz\n",
 						(peak + 1) * Hz);
 					ret = -EINVAL;
@@ -308,10 +311,10 @@ int main(int argc, char *argv[])
 	}
 	
 	// Sine generation
-    fprintf(stdout, "Sine tone at %2.2f Hz, sampling frequency is %i Hz\n",
-		bat.target_freq, bat.rate);
-	generate_sine(bat.target_freq, bat.rate);
-	fprintf(stdout, "Sine generation ended\n");
+//	fprintf(stdout, "Sine tone at %2.2f Hz, sampling frequency is %i Hz\n",
+//		bat.target_freq, bat.rate);
+//	generate_sine(bat.target_freq, bat.rate);
+//	fprintf(stdout, "Sine generation ended\n");
 	
 	
 	fprintf(stdout, "BAT input is %d frames at %d Hz, %d channels, frame size %d bytes\n",
