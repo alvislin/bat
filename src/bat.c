@@ -22,29 +22,14 @@
 #include <errno.h>
 #include <fftw3.h>
 #include <math.h>
-#include <alsa/asoundlib.h>
-#include <alsa/pcm.h>
+#include "common.h"
+#include "wav_play_record.h"
 
 #define BUFFER_LENGTH 48000
 
-struct bat {
-	int rate;
-	int channels;
-	int frames;
-	int frame_size;
-
-	float sigma_k;
-	float target_freq;
-
-	void *buf;	/* PCM Buffer */
-	double *in;
-	double *out;
-	double *mag;
-};
-
 static void usage(char *argv[])
 {
-	fprintf(stdout, "Usage:%s [-f file] [-n frames] [-s frame size] [-k sigma k] [-F Target Freq]\n",
+	fprintf(stdout, "Usage:%s [-D pcm device] [-f file] [-n frames] [-s frame size] [-k sigma k] [-F Target Freq]\n",
 		argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
 	exit(0);
@@ -123,7 +108,7 @@ static int check(struct bat *bat)
 				fprintf(stdout, " Total %3.1f dB from %2.2f to %2.2f Hz\n",
 					10.0 * log10(p / mean),
 					(start + 1) * Hz, (end + 1) * Hz);
-				if ((peak + 1) > 3.99 && (peak + 1) < 4.01) {
+				if ((peak + 1) * Hz > 3.99 && (peak + 1) * Hz < 4.01) {
 					fprintf(stdout, "Warning: there is too low peak %2.2f Hz, very close to DC\n", 
 						(peak + 1) * Hz);
 				} else if ((peak + 1) * Hz < bat->target_freq - 1.0) {
@@ -268,7 +253,9 @@ int main(int argc, char *argv[])
 {
 	struct bat bat;
 	int ret, opt;
-	char *file = NULL;
+	int *thread_ret;
+	char *file;
+	pthread_t play_id, record_id;
 
 	memset(&bat, 0, sizeof(bat));
 
@@ -279,12 +266,17 @@ int main(int argc, char *argv[])
 	bat.frames = bat.rate;
 	bat.target_freq = 997.0;
 	bat.sigma_k = 3.0;
+	bat.device = NULL;
+	bat.buf = NULL;
+	file = TEMP_RECORD_FILE_NAME;
 
 	/* Parse options */
-	while ((opt = getopt(argc, argv, "hf:s:n:F:c:r:k:")) != -1) {
+	while ((opt = getopt(argc, argv, "hf:s:n:F:c:r:k:D:")) != -1) {
 		switch (opt) {
+		case 'D':
+			bat.device = optarg;
 		case 'f':
-			file = optarg;
+			bat.input_file = optarg;
 			break;
 		case 'n':
 			bat.frames = atoi(optarg);
@@ -316,6 +308,29 @@ int main(int argc, char *argv[])
 //	generate_sine(bat.target_freq, bat.rate);
 //	fprintf(stdout, "Sine generation ended\n");
 	
+	ret = pthread_create(&record_id, NULL, record, (void *)&bat);
+        if ( 0 != ret ) {
+                fprintf(stdout, "Create record thread error!\n");
+                exit(1);
+        }
+
+        ret = pthread_create(&play_id, NULL, play, (void *)&bat);
+        if ( 0 != ret ) {
+                fprintf(stdout, "Create play thread error!\n");
+                pthread_cancel(record_id);
+                exit(1);
+        }
+
+        pthread_join(play_id, (void **)&thread_ret);
+	fprintf(stdout, "Play thread exit!\n");
+        pthread_cancel(record_id);
+        if ( 0 != *thread_ret ) {
+                fprintf(stdout, "Return value of Play thread is %x!\n", *thread_ret);
+                fprintf(stdout, "Sound played fail!\n");
+                exit(1);
+        }
+        pthread_join(record_id, NULL);
+        fprintf(stdout, "Record thread exit!\n");
 	
 	fprintf(stdout, "BAT input is %d frames at %d Hz, %d channels, frame size %d bytes\n",
 		bat.frames, bat.rate, bat.channels, bat.frame_size);

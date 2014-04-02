@@ -11,6 +11,7 @@ Install
 
 BAT can be installed by running :-
 
+./autogen.sh
 ./configure
 make
 make install
@@ -24,17 +25,11 @@ errors by comparing the captured audio PCM data to the original PCM data.
 
 BAT should be used as follows :-
 
-1) Use arecord and aplay to capture a loopback PCM file e.g.
+1) Run the recorded sample through. i.e.
 
- arecord -r 44100 -c 1 -f S16_LE > test.wav &
- aplay sine-997Hz-mono.wav && kill arecord
+  bat -D plughw:1,0 -r 44100 -c 1 -s 2 -n 88200 -F 997 -f file
 
-2) Run the recorded sample through. i.e.
-
-  bat -r 44100 -c 1 -s 2 -n 88200 -F 997 -f file
-
-Where r is rate, c is channels, s is frame size in bytes, n is frames to read
-and F is target frequency. BAT will return a negative result on any errors.
+Where D is pcm device number, r is rate, c is channels, s is frame size in bytes, n is frames to read and F is target frequency. BAT will return a negative result on any errors.
 
 
 Future Plans
