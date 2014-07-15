@@ -23,9 +23,7 @@ Usage
 BAT is intended to analyse audio recorded in loopback mode for quality and gain
 errors by comparing the captured audio PCM data to the original PCM data.
 
-BAT should be used as follows :-
-
-1) Run the recorded sample through. i.e.
+BAT should be used as follow command :-
 
   bat -D plughw:1,0 -r 44100 -c 1 -s 2 -n 88200 -F 997 -f file
 
@@ -39,11 +37,9 @@ Future Plans
 
 2) Add Sine wave generator.
 
-3) Call alsa API calls directly to play and capture audio so usage step 1 is no longer required.
+3) Detect gain changes, i.e. compare max signal against expected max.
 
-4) Detect gain changes, i.e. compare max signal against expected max.
-
-5) Test driver loopback stream latency i.e mesure the time it takes to receive
+4) Test driver loopback stream latency i.e mesure the time it takes to receive
    samples after playing them.
 
 
