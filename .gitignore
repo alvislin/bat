@@ -27,3 +27,5 @@ install-sh
 libtool
 ltmain.sh
 src/bat
+/.settings/
+/.autotools

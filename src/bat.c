@@ -29,8 +29,9 @@
 
 static void usage(char *argv[])
 {
-	fprintf(stdout, "Usage:%s [-D pcm device] [-f file] [-n frames] [-s frame size] [-k sigma k] [-F Target Freq]\n",
-		argv[0]);
+	fprintf(stdout,
+			"Usage:%s [-D pcm device] [-f file] [-n frames] [-s frame size] [-k sigma k] [-F Target Freq]\n",
+			argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
 	exit(0);
 }
@@ -62,7 +63,7 @@ static void convert(struct bat *bat)
 /* hard coded for rate of 44100 Hz atm */
 static int check(struct bat *bat)
 {
-	float Hz =  2.0 / ((float) bat->frames / (float) bat->rate);
+	float Hz = 2.0 / ((float) bat->frames / (float) bat->rate);
 	float mean = 0.0, t, sigma = 0.0, p = 0.0;
 	int i, start = -1, end = -1, peak = 0, signals = 0;
 	int ret = 0, N = bat->frames / 2;
@@ -73,7 +74,7 @@ static int check(struct bat *bat)
 	mean /= (float) N;
 
 	/* calculate standard deviation */
-	for (i = 0; i < N;  i++) {
+	for (i = 0; i < N; i++) {
 		t = bat->mag[i] - mean;
 		t *= t;
 		sigma += t;
@@ -104,27 +105,28 @@ static int check(struct bat *bat)
 			/* find peak end point */
 			if (end != -1) {
 				fprintf(stdout, "Detected peak at %2.2f Hz of %2.2f dB\n",
-					(peak + 1) * Hz, 10.0 * log10(bat->mag[peak] / mean));
+						(peak + 1) * Hz, 10.0 * log10(bat->mag[peak] / mean));
 				fprintf(stdout, " Total %3.1f dB from %2.2f to %2.2f Hz\n",
-					10.0 * log10(p / mean),
-					(start + 1) * Hz, (end + 1) * Hz);
+						10.0 * log10(p / mean), (start + 1) * Hz,
+						(end + 1) * Hz);
 				if ((peak + 1) * Hz > 3.99 && (peak + 1) * Hz < 4.01) {
-					fprintf(stdout, "Warning: there is too low peak %2.2f Hz, very close to DC\n", 
-						(peak + 1) * Hz);
+					fprintf(stdout,
+							"Warning: there is too low peak %2.2f Hz, very close to DC\n",
+							(peak + 1) * Hz);
 				} else if ((peak + 1) * Hz < bat->target_freq - 1.0) {
 					fprintf(stdout, " Peak too low %2.2f Hz\n",
-						(peak + 1) * Hz);
+							(peak + 1) * Hz);
 					ret = -EINVAL;
 				} else if ((peak + 1) * Hz > bat->target_freq + 1.0) {
 					fprintf(stdout, " Peak too high %2.2f Hz\n",
-						(peak + 1) * Hz);
+							(peak + 1) * Hz);
 					ret = -EINVAL;
 				}
- 
+
 				end = -1;
 				start = -1;
 			}
-		}	
+		}
 	}
 	fprintf(stdout, "Detected %d signal(s) in total\n", signals);
 
@@ -151,7 +153,7 @@ static int fft(struct bat *bat)
 
 	/* create FFT plan */
 	p = fftw_plan_r2r_1d(N, bat->in, bat->out, FFTW_R2HC,
-		FFTW_MEASURE | FFTW_PRESERVE_INPUT);
+	FFTW_MEASURE | FFTW_PRESERVE_INPUT);
 	if (p == NULL)
 		goto out;
 
@@ -200,7 +202,7 @@ static int file_load(struct bat *bat, char *file)
 		ret = -EIO;
 		goto out;
 	}
-	
+
 	ret = fft(bat);
 
 out:
@@ -211,40 +213,32 @@ out:
 
 int generate_sine(int frequency, int sampling_frequency)
 {
-	static char *device = "default";		//soundcard, to change into parameters?
-	float buffer [BUFFER_LENGTH];
+	static char *device = "default";	//soundcard, to change into parameters?
+	float buffer[BUFFER_LENGTH];
 
-    int err;
-    int k;
+	int err;
+	int k;
 
-    snd_pcm_t *handle;
+	snd_pcm_t *handle;
 
-    // Error Handling
-    if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0)
-	{
-            printf("Playback open error: %s\n", snd_strerror(err));
-            exit(EXIT_FAILURE);
-    }
+	// Error Handling
+	if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+		printf("Playback open error: %s\n", snd_strerror(err));
+		exit(EXIT_FAILURE);
+	}
 
-	if ((err = snd_pcm_set_params(handle,
-                                  SND_PCM_FORMAT_FLOAT,
-                                  SND_PCM_ACCESS_RW_INTERLEAVED,
-                                  1,
-                                  48000,
-                                  1,
-                                  500000)) < 0) 
-	{
-			printf("Playback open error: %s\n", snd_strerror(err));
-			exit(EXIT_FAILURE);
-    }
+	if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_FLOAT,
+			SND_PCM_ACCESS_RW_INTERLEAVED, 1, 48000, 1, 500000)) < 0) {
+		printf("Playback open error: %s\n", snd_strerror(err));
+		exit(EXIT_FAILURE);
+	}
 
 	// Sine wave value generation
-	for (k = 0 ; k < BUFFER_LENGTH ; k++)
-	{
+	for (k = 0; k < BUFFER_LENGTH; k++) {
 		buffer[k] = (sin(k * 2 * M_PI * frequency / sampling_frequency));
 	}
-	
-	snd_pcm_writei(handle, buffer, BUFFER_LENGTH);						// Send values to sound driver
+
+	snd_pcm_writei(handle, buffer, BUFFER_LENGTH);// Send values to sound driver
 	snd_pcm_close(handle);
 	return 0;
 }
@@ -275,6 +269,7 @@ int main(int argc, char *argv[])
 		switch (opt) {
 		case 'D':
 			bat.device = optarg;
+			break;
 		case 'f':
 			bat.input_file = optarg;
 			break;
@@ -301,42 +296,43 @@ int main(int argc, char *argv[])
 			usage(argv);
 		}
 	}
-	
+
 	// Sine generation
 //	fprintf(stdout, "Sine tone at %2.2f Hz, sampling frequency is %i Hz\n",
 //		bat.target_freq, bat.rate);
 //	generate_sine(bat.target_freq, bat.rate);
 //	fprintf(stdout, "Sine generation ended\n");
-	
-	ret = pthread_create(&record_id, NULL, record, (void *)&bat);
-        if ( 0 != ret ) {
-                fprintf(stdout, "Create record thread error!\n");
-                exit(1);
-        }
 
-        ret = pthread_create(&play_id, NULL, play, (void *)&bat);
-        if ( 0 != ret ) {
-                fprintf(stdout, "Create play thread error!\n");
-                pthread_cancel(record_id);
-                exit(1);
-        }
+	ret = pthread_create(&record_id, NULL, record, (void *) &bat);
+	if (0 != ret) {
+		fprintf(stdout, "Create record thread error!\n");
+		exit(1);
+	}
 
-        pthread_join(play_id, (void **)&thread_ret);
+	ret = pthread_create(&play_id, NULL, play, (void *) &bat);
+	if (0 != ret) {
+		fprintf(stdout, "Create play thread error!\n");
+		pthread_cancel(record_id);
+		exit(1);
+	}
+
+	pthread_join(play_id, (void **) &thread_ret);
 	fprintf(stdout, "Play thread exit!\n");
-        pthread_cancel(record_id);
-        if ( 0 != *thread_ret ) {
-                fprintf(stdout, "Return value of Play thread is %x!\n", *thread_ret);
-                fprintf(stdout, "Sound played fail!\n");
-                exit(1);
-        }
-        pthread_join(record_id, NULL);
-        fprintf(stdout, "Record thread exit!\n");
-	
-	fprintf(stdout, "BAT input is %d frames at %d Hz, %d channels, frame size %d bytes\n",
-		bat.frames, bat.rate, bat.channels, bat.frame_size);
+	pthread_cancel(record_id);
+	if (0 != *thread_ret) {
+		fprintf(stdout, "Return value of Play thread is %x!\n", *thread_ret);
+		fprintf(stdout, "Sound played fail!\n");
+		exit(1);
+	}
+	pthread_join(record_id, NULL);
+	fprintf(stdout, "Record thread exit!\n");
+
+	fprintf(stdout,
+			"BAT input is %d frames at %d Hz, %d channels, frame size %d bytes\n",
+			bat.frames, bat.rate, bat.channels, bat.frame_size);
 	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n",
-		bat.target_freq);
- 
+			bat.target_freq);
+
 	ret = file_load(&bat, file);
 	return ret;
-}	
+}
