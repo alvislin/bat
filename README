@@ -27,7 +27,12 @@ BAT should be used as follow command :-
 
   bat -D plughw:1,0 -r 44100 -c 1 -s 2 -n 88200 -F 997 -f file
 
-Where D is pcm device number, r is rate, c is channels, s is frame size in bytes, n is frames to read and F is target frequency. BAT will return a negative result on any errors.
+Where D is pcm device number, r is sample rate of input file, c is number of channels, s is frame size in bytes, 
+n is frames to read, f is input file and F is target frequency.
+Normally input file is a sinus and target frequency is the frequency of the sinus.
+You need to connect playback to capture through an audio jack cable. 
+BAT will capture the playback of the input file and do a FFT to determine fundamental frequency of the input file.
+BAT will return a negative result on any errors.
 
 
 Future Plans

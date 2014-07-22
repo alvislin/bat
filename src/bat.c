@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <errno.h>
 #include <fftw3.h>
@@ -30,7 +31,7 @@
 static void usage(char *argv[])
 {
 	fprintf(stdout,
-			"Usage:%s [-D pcm device] [-f file] [-n frames] [-s frame size] [-k sigma k] [-F Target Freq]\n",
+			"Usage:%s [-D pcm device] [-f file] [-n frames] [-s frame size] [-k sigma k] [-F Target Freq] [-l internal loop, bypass alsa]\n",
 			argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
 	exit(0);
@@ -90,6 +91,7 @@ static int check(struct bat *bat)
 			if (start == -1) {
 				start = i;
 				peak = i;
+				end = i;
 				signals++;
 			} else {
 				if (bat->mag[i] > bat->mag[peak])
@@ -114,13 +116,16 @@ static int check(struct bat *bat)
 							"Warning: there is too low peak %2.2f Hz, very close to DC\n",
 							(peak + 1) * Hz);
 				} else if ((peak + 1) * Hz < bat->target_freq - 1.0) {
-					fprintf(stdout, " Peak too low %2.2f Hz\n",
+					fprintf(stdout, " FAIL: Peak too low %2.2f Hz\n",
 							(peak + 1) * Hz);
 					ret = -EINVAL;
 				} else if ((peak + 1) * Hz > bat->target_freq + 1.0) {
-					fprintf(stdout, " Peak too high %2.2f Hz\n",
+					fprintf(stdout, " FAIL: Peak too high %2.2f Hz\n",
 							(peak + 1) * Hz);
 					ret = -EINVAL;
+				} else {
+					fprintf(stdout, " PASS: Peak detected at target frequency\n");
+					ret = 0;
 				}
 
 				end = -1;
@@ -129,6 +134,7 @@ static int check(struct bat *bat)
 		}
 	}
 	fprintf(stdout, "Detected %d signal(s) in total\n", signals);
+	fprintf(stdout, "\nReturn value is %d\n", ret);
 
 	return ret;
 }
@@ -138,7 +144,7 @@ static int fft(struct bat *bat)
 	fftw_plan p;
 	int ret = -ENOMEM, N = bat->frames / 2;
 
-	/* alocate FFT buffers */
+	/* Allocate FFT buffers */
 	bat->in = (double*) fftw_malloc(sizeof(double) * bat->frames);
 	if (bat->in == NULL)
 		goto out;
@@ -153,7 +159,7 @@ static int fft(struct bat *bat)
 
 	/* create FFT plan */
 	p = fftw_plan_r2r_1d(N, bat->in, bat->out, FFTW_R2HC,
-	FFTW_MEASURE | FFTW_PRESERVE_INPUT);
+			FFTW_MEASURE | FFTW_PRESERVE_INPUT);
 	if (p == NULL)
 		goto out;
 
@@ -243,13 +249,40 @@ int generate_sine(int frequency, int sampling_frequency)
 	return 0;
 }
 
+static void play_and_record_alsa(struct bat* bat)
+{
+	int ret;
+	pthread_t record_id, play_id;
+	int* thread_ret;
+
+	ret = pthread_create(&record_id, NULL, record, (void *) bat);
+	if (0 != ret) {
+		fprintf(stdout, "Create record thread error!\n");
+		exit(1);
+	}
+	ret = pthread_create(&play_id, NULL, play, (void *) bat);
+	if (0 != ret) {
+		fprintf(stdout, "Create play thread error!\n");
+		pthread_cancel(record_id);
+		exit(1);
+	}
+	pthread_join(play_id, (void**) &thread_ret);
+	fprintf(stdout, "Play thread exit!\n");
+	pthread_cancel(record_id);
+	if (0 != *thread_ret) {
+		fprintf(stdout, "Return value of Play thread is %x!\n", *thread_ret);
+		fprintf(stdout, "Sound played fail!\n");
+		exit(1);
+	}
+	pthread_join(record_id, NULL);
+	fprintf(stdout, "Record thread exit!\n");
+}
+
 int main(int argc, char *argv[])
 {
 	struct bat bat;
 	int ret, opt;
-	int *thread_ret;
 	char *file;
-	pthread_t play_id, record_id;
 
 	memset(&bat, 0, sizeof(bat));
 
@@ -262,10 +295,10 @@ int main(int argc, char *argv[])
 	bat.sigma_k = 3.0;
 	bat.device = NULL;
 	bat.buf = NULL;
-	file = TEMP_RECORD_FILE_NAME;
+	bat.local = false;
 
 	/* Parse options */
-	while ((opt = getopt(argc, argv, "hf:s:n:F:c:r:k:D:")) != -1) {
+	while ((opt = getopt(argc, argv, "hf:s:n:F:c:r:k:D:l::")) != -1) {
 		switch (opt) {
 		case 'D':
 			bat.device = optarg;
@@ -291,6 +324,9 @@ int main(int argc, char *argv[])
 		case 'k':
 			bat.sigma_k = atof(optarg);
 			break;
+		case 'l':
+			bat.local = true;
+			break;
 		case 'h':
 		default: /* '?' */
 			usage(argv);
@@ -303,34 +339,17 @@ int main(int argc, char *argv[])
 //	generate_sine(bat.target_freq, bat.rate);
 //	fprintf(stdout, "Sine generation ended\n");
 
-	ret = pthread_create(&record_id, NULL, record, (void *) &bat);
-	if (0 != ret) {
-		fprintf(stdout, "Create record thread error!\n");
-		exit(1);
+	if (bat.local == false) {
+		play_and_record_alsa(&bat);
+		file = TEMP_RECORD_FILE_NAME;
+	} else {
+		file = bat.input_file;
 	}
-
-	ret = pthread_create(&play_id, NULL, play, (void *) &bat);
-	if (0 != ret) {
-		fprintf(stdout, "Create play thread error!\n");
-		pthread_cancel(record_id);
-		exit(1);
-	}
-
-	pthread_join(play_id, (void **) &thread_ret);
-	fprintf(stdout, "Play thread exit!\n");
-	pthread_cancel(record_id);
-	if (0 != *thread_ret) {
-		fprintf(stdout, "Return value of Play thread is %x!\n", *thread_ret);
-		fprintf(stdout, "Sound played fail!\n");
-		exit(1);
-	}
-	pthread_join(record_id, NULL);
-	fprintf(stdout, "Record thread exit!\n");
 
 	fprintf(stdout,
-			"BAT input is %d frames at %d Hz, %d channels, frame size %d bytes\n",
+			"\nBAT input is %d frames at %d Hz, %d channels, frame size %d bytes\n\n",
 			bat.frames, bat.rate, bat.channels, bat.frame_size);
-	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n",
+	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n\n",
 			bat.target_freq);
 
 	ret = file_load(&bat, file);

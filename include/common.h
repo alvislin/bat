@@ -17,4 +17,6 @@ struct bat {
         double *in;
         double *out;
         double *mag;
+
+        bool local;		/* TRUE for internal test, otherwise FALSE */
 };
