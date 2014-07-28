@@ -50,6 +50,10 @@ static void calc_magnitude(struct bat *bat, int N)
 	}
 	bat->mag[0] = 0.0;
 }
+static double hanning (int i, int nn)
+{
+  return ( 0.5 * (1.0 - cos (2.0*M_PI*(double)i/(double)(nn-1))) );
+}
 
 /* hard coded atm to only accept short to double conversion */
 static void convert(struct bat *bat)
@@ -58,7 +62,7 @@ static void convert(struct bat *bat)
 	int i;
 
 	for (i = 0; i < bat->frames; i++)
-		bat->in[i] = s[i];
+		bat->in[i] = s[i] * hanning(i,bat->frames);
 }
 
 /* hard coded for rate of 44100 Hz atm */
@@ -83,15 +87,16 @@ static int check(struct bat *bat)
 	sigma /= (float) N;
 	sigma = sqrtf(sigma);
 
-	/* clip any data less than k sigma */
+	/* clip any data less than k sigma + mean */
 	for (i = 0; i < N; i++) {
-		if (bat->mag[i] > bat->sigma_k * sigma) {
+		if (bat->mag[i] > mean + bat->sigma_k * sigma) {
 
 			/* find peak start points */
 			if (start == -1) {
 				start = i;
 				peak = i;
 				end = i;
+				p = 0;
 				signals++;
 			} else {
 				if (bat->mag[i] > bat->mag[peak])
@@ -111,16 +116,16 @@ static int check(struct bat *bat)
 				fprintf(stdout, " Total %3.1f dB from %2.2f to %2.2f Hz\n",
 						10.0 * log10(p / mean), (start + 1) * Hz,
 						(end + 1) * Hz);
-				if ((peak + 1) * Hz > 3.99 && (peak + 1) * Hz < 4.01) {
+				if ((peak + 1) * Hz > 1.99 && (peak + 1) * Hz < 7.01) {
 					fprintf(stdout,
 							"Warning: there is too low peak %2.2f Hz, very close to DC\n",
 							(peak + 1) * Hz);
 				} else if ((peak + 1) * Hz < bat->target_freq - 1.0) {
-					fprintf(stdout, " FAIL: Peak too low %2.2f Hz\n",
+					fprintf(stdout, " FAIL: Peak freq too low %2.2f Hz\n",
 							(peak + 1) * Hz);
 					ret = -EINVAL;
 				} else if ((peak + 1) * Hz > bat->target_freq + 1.0) {
-					fprintf(stdout, " FAIL: Peak too high %2.2f Hz\n",
+					fprintf(stdout, " FAIL: Peak freq too high %2.2f Hz\n",
 							(peak + 1) * Hz);
 					ret = -EINVAL;
 				} else {

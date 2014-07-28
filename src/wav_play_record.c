@@ -98,7 +98,7 @@ int setSNDPCMParams(struct bat *pa_bat, struct SNDPCMContainer *sndpcm)
 
 	if (buffer_time > 500000)
 		buffer_time = 500000;
-	period_time = buffer_time / 4;
+	period_time = buffer_time / 8;		/* Was 4, changed to 8 to remove reduce capture overrun */
 
 	/* Set buffer time and period time */
 	snd_pcm_hw_params_set_buffer_time_near(sndpcm->handle, params, &buffer_time,
@@ -204,7 +204,7 @@ void *play(void *bat_param)
 			if (err == -EAGAIN || (err >= 0 && err < size)) {
 				snd_pcm_wait(sndpcm.handle, 500);
 			} else if (err == -EPIPE) {
-				fprintf(stderr, "Underrun occurred\n");
+				fprintf(stderr, "Playback: Underrun occurred\n");
 				snd_pcm_prepare(sndpcm.handle);
 			} else if (err < 0) {
 				fprintf(stderr, "Write to pcm device fail\n");
@@ -355,7 +355,7 @@ void *record(void *bat_param)
 				snd_pcm_wait(sndpcm.handle, 500);
 			} else if (err == -EPIPE) {
 				snd_pcm_prepare(sndpcm.handle);
-				fprintf(stderr, "Underrun occurred\n");
+				fprintf(stderr, "Capture: Overrun occurred\n");
 			} else if (err < 0) {
 				fprintf(stderr, "Read from pcm device fail\n");
 				goto fail_exit;
