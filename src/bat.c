@@ -26,8 +26,6 @@
 #include "common.h"
 #include "wav_play_record.h"
 
-#define BUFFER_LENGTH 48000
-
 static void usage(char *argv[])
 {
 	fprintf(stdout,
@@ -50,6 +48,7 @@ static void calc_magnitude(struct bat *bat, int N)
 	}
 	bat->mag[0] = 0.0;
 }
+
 static double hanning (int i, int nn)
 {
   return ( 0.5 * (1.0 - cos (2.0*M_PI*(double)i/(double)(nn-1))) );
@@ -222,55 +221,28 @@ out:
 	return ret;
 }
 
-int generate_sine(int frequency, int sampling_frequency)
-{
-	static char *device = "default";	//soundcard, to change into parameters?
-	float buffer[BUFFER_LENGTH];
-
-	int err;
-	int k;
-
-	snd_pcm_t *handle;
-
-	// Error Handling
-	if ((err = snd_pcm_open(&handle, device, SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
-		printf("Playback open error: %s\n", snd_strerror(err));
-		exit(EXIT_FAILURE);
-	}
-
-	if ((err = snd_pcm_set_params(handle, SND_PCM_FORMAT_FLOAT,
-			SND_PCM_ACCESS_RW_INTERLEAVED, 1, 48000, 1, 500000)) < 0) {
-		printf("Playback open error: %s\n", snd_strerror(err));
-		exit(EXIT_FAILURE);
-	}
-
-	// Sine wave value generation
-	for (k = 0; k < BUFFER_LENGTH; k++) {
-		buffer[k] = (sin(k * 2 * M_PI * frequency / sampling_frequency));
-	}
-
-	snd_pcm_writei(handle, buffer, BUFFER_LENGTH);// Send values to sound driver
-	snd_pcm_close(handle);
-	return 0;
-}
-
 static void play_and_record_alsa(struct bat* bat)
 {
 	int ret;
 	pthread_t record_id, play_id;
 	int* thread_ret;
 
-	ret = pthread_create(&record_id, NULL, record, (void *) bat);
-	if (0 != ret) {
-		fprintf(stdout, "Create record thread error!\n");
-		exit(1);
-	}
 	ret = pthread_create(&play_id, NULL, play, (void *) bat);
+
 	if (0 != ret) {
 		fprintf(stdout, "Create play thread error!\n");
 		pthread_cancel(record_id);
 		exit(1);
 	}
+
+	sleep(1);	/* Let time for playing something before recording */
+
+	ret = pthread_create(&record_id, NULL, record, (void *) bat);
+	if (0 != ret) {
+		fprintf(stdout, "Create record thread error!\n");
+		exit(1);
+	}
+
 	pthread_join(play_id, (void**) &thread_ret);
 	fprintf(stdout, "Play thread exit!\n");
 	pthread_cancel(record_id);
@@ -338,21 +310,26 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// Sine generation
-//	fprintf(stdout, "Sine tone at %2.2f Hz, sampling frequency is %i Hz\n",
-//		bat.target_freq, bat.rate);
-//	generate_sine(bat.target_freq, bat.rate);
-//	fprintf(stdout, "Sine generation ended\n");
+	if (bat.input_file == NULL) {
+		/* No input file so we will generate our own sinusoid */
+		bat.frame_size=2;					/* SND_PCM_FORMAT_S16_LE */
+		bat.sinus_duration =  bat.rate;		/* Nb of frames for 1 second */
+		bat.sinus_duration += 2*bat.frames;	/* Play long enough to record frame_size frames */
+	}
 
 	if (bat.local == false) {
 		play_and_record_alsa(&bat);
 		file = TEMP_RECORD_FILE_NAME;
 	} else {
 		file = bat.input_file;
+		if (file == NULL) {
+			fprintf(stdout,"You have to specify an input file for local testing!\n");
+			exit(-1);
+		}
 	}
 
 	fprintf(stdout,
-			"\nBAT input is %d frames at %d Hz, %d channels, frame size %d bytes\n\n",
+			"\nBAT analysed signal is %d frames at %d Hz, %d channels, frame size %d bytes\n\n",
 			bat.frames, bat.rate, bat.channels, bat.frame_size);
 	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n\n",
 			bat.target_freq);

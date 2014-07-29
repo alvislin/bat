@@ -23,16 +23,28 @@ Usage
 BAT is intended to analyse audio recorded in loopback mode for quality and gain
 errors by comparing the captured audio PCM data to the original PCM data.
 
-BAT should be used as follow command :-
+BAT should be used as this :
 
-  bat -D plughw:1,0 -r 44100 -c 1 -s 2 -n 88200 -F 997 -f file
+- To play a sinus wav file sampled a 44100Hz on one channel with 16bits per sample, record it for 88200 frames (2s) and find the main harmonic at 1000Hz
+    bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav
+  
+- To test analysis part of BAT. Play file.wav sampled at 441000Hz on one channel with 16bits per sample, and verify main harmonic of file.wav is at 1000Hz
+	bat -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav -l
+	
+- To generate internally a sinusoide sampled a 44100Hz on one channel, record it for 88200 frames and find the main harmonic at 1000Hz
+    bat -D plughw:0,0 -r 44100 -c 1 -n 88200 -F 1000
 
 Where D is pcm device number, r is sample rate of input file, c is number of channels, s is frame size in bytes, 
-n is frames to read, f is input file and F is target frequency.
-Normally input file is a sinus and target frequency is the frequency of the sinus.
+n is number of frames to be analysed, f is input file and F is target frequency.
+Normally input is a sinus and target frequency is the frequency of the sinus.
 You need to connect playback to capture through an audio jack cable. 
-BAT will capture the playback of the input file and do a FFT to determine fundamental frequency of the input file.
-BAT will return a negative result on any errors.
+BAT will capture the playback of the input file and do a FFT to determine fundamental frequency of the input.
+BAT will return a negative result on any errors and 0 if fundamental frequency found is one specified in F argument.
+
+Limitations
+=====
+- Input file length must be greater than 1s + number of frames.
+- Sinusoid generation is currently limited to 1 channel with a frame size of 2 bytes.
 
 
 Future Plans

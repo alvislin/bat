@@ -11,6 +11,8 @@ struct bat {
         float sigma_k;
         float target_freq;
 
+        int sinus_duration;
+
         char *device;
         char *input_file;
         void *buf;      /* PCM Buffer */

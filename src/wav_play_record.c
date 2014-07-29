@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
+#include <stdint.h>
 #include "common.h"
 #include "wav_play_record.h"
 
@@ -82,7 +84,7 @@ int setSNDPCMParams(struct bat *pa_bat, struct SNDPCMContainer *sndpcm)
 		format = SND_PCM_FORMAT_S32_LE;
 		break;
 	default:
-		fprintf(stderr, "Not support format.\n");
+		fprintf(stderr, "Not supported format.\n");
 		goto fail_exit;
 	}
 	snd_pcm_hw_params_set_format(sndpcm->handle, params, format);
@@ -137,13 +139,61 @@ fail_exit:
 	return -1;
 }
 
+/*
+ * Return value
+ * <0 error
+ * 0 ok
+ * >0 break
+ */
+static int generate_input_data(FILE *fp, struct SNDPCMContainer sndpcm, int count,struct bat *pa_bat)
+{
+	int err;
+	static int load = 0;
+	static int i = 0;;
+	int k;
+
+	if (fp != NULL) {
+		load = 0;
+		while (1) {
+			err = fread(sndpcm.buffer + load, 1, count - load, fp);
+			if (0 == err) {
+				if (feof(fp)) {
+					fprintf(stdout, "End of playing.\n");
+					return 1;
+				}
+			}
+			if (err < count - load) {
+				if (ferror(fp)) {
+					fprintf(stderr, "Error when reading input file\n");
+					return -1;
+				}
+				load += err;
+			} else {
+				break;
+			}
+		}
+	} else {
+		if (load > pa_bat->sinus_duration)
+			return 1;
+
+		int16_t *buf = (int16_t *)sndpcm.buffer;
+		for (k = 0; k < count * 8 / sndpcm.frame_bits; k++) {
+			float sinus_f = sin(i++ * 2 * M_PI * pa_bat->target_freq / pa_bat->rate) * INT16_MAX;
+			*buf++ = (int16_t)(sinus_f);
+		}
+		load += (count * 8 / sndpcm.frame_bits);
+	}
+	return 0;
+}
+
 void *play(void *bat_param)
 {
 	int err = 0;
 	FILE *fp = NULL;
 	struct SNDPCMContainer sndpcm;
-	int size, offset, count, load;
+	int size, offset, count;
 	struct bat *pa_bat = (struct bat *) bat_param;
+	int ret;
 
 	fprintf(stdout, "Enter play thread!\n");
 	memset(&sndpcm, 0, sizeof(sndpcm));
@@ -167,38 +217,27 @@ void *play(void *bat_param)
 
 	if (NULL != pa_bat->input_file) {
 		fp = fopen(pa_bat->input_file, "rb+");
+		fprintf(stdout, "Playing input audio file: %s\n", pa_bat->input_file);
 		if (NULL == fp) {
 			fprintf(stderr, "Cannot access %s: No such file\n",
 					pa_bat->input_file);
 			goto fail_exit;
 		}
 	} else {
-		fprintf(stderr, "No input file to open\n");
-		goto fail_exit;
+		fprintf(stdout, "Playing generated audio sinusoids\n");
 	}
 
 	count = sndpcm.period_bytes;
-	load = 0;
-	fprintf(stdout, "Playing input audio file: %s\n", pa_bat->input_file);
 	while (1) {
-		err = fread(sndpcm.buffer + load, 1, count - load, fp);
-		if (0 == err) {
-			if (feof(fp)) {
-				fprintf(stdout, "End of playing.\n");
-				break;
-			}
-		}
-		if (err < count - load) {
-			if (ferror(fp)) {
-				fprintf(stderr, "Error when reading %s\n", pa_bat->input_file);
-				goto fail_exit;
-			}
-			load += err;
-			continue;
-		}
-
 		offset = 0;
 		size = count * 8 / sndpcm.frame_bits;
+
+		ret = generate_input_data(fp,sndpcm,count,pa_bat);
+		if (ret < 0)
+			goto fail_exit;
+		else if (ret > 0)
+			break;
+
 		while (size > 0) {
 			err = snd_pcm_writei(sndpcm.handle, sndpcm.buffer + offset, size);
 			if (err == -EAGAIN || (err >= 0 && err < size)) {
@@ -216,11 +255,11 @@ void *play(void *bat_param)
 				offset += err * sndpcm.frame_bits / 8;
 			}
 		}
-		load = 0;
 	}
 
 	snd_pcm_drain(sndpcm.handle);
-	fclose(fp);
+	if (fp)
+		fclose(fp);
 	free(sndpcm.buffer);
 	snd_pcm_close(sndpcm.handle);
 //	fprintf(stdout, "Exit thread play!\n");
@@ -237,6 +276,7 @@ fail_exit:
 	retval_play = 1;
 	pthread_exit(&retval_play);
 }
+
 
 static int prepare_wav_info(WAVContainer_t *wav, struct bat *pa_bat)
 {
