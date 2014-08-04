@@ -25,7 +25,7 @@ errors by comparing the captured audio PCM data to the original PCM data.
 
 BAT should be used as this :
 
-- To play a sinus wav file sampled a 44100Hz on one channel with 16bits per sample, record it for 88200 frames (2s) and find the main harmonic at 1000Hz
+- To play a sinus wav file sampled at 44100Hz on one channel with 16bits per sample, record it for 88200 frames (2s) and find the main harmonic at 1000Hz
     bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav
   
 - To test analysis part of BAT. Play file.wav sampled at 441000Hz on one channel with 16bits per sample, and verify main harmonic of file.wav is at 1000Hz
@@ -41,10 +41,18 @@ You need to connect playback to capture through an audio jack cable.
 BAT will capture the playback of the input file and do a FFT to determine fundamental frequency of the input.
 BAT will return a negative result on any errors and 0 if fundamental frequency found is one specified in F argument.
 
+It can also be used to generate a continuous sine wave.
+
+- to play endlessly a sinus wave at 44100Hz on one channel with 16bits per sample.
+	bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 0  
+
+
 Limitations
 =====
 - Input file length must be greater than 1s + number of frames.
 - Sinusoid generation is currently limited to 1 channel with a frame size of 2 bytes.
+- Input and output gain should be correctly set. Better is to use alsamixer to set 0dB gain for both input and output, otherwise you may have
+distortions during recording and it may lead to non detection of main harmonic. 
 
 
 Future Plans

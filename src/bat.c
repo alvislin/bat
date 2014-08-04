@@ -29,7 +29,7 @@
 static void usage(char *argv[])
 {
 	fprintf(stdout,
-			"Usage:%s [-D pcm device] [-f file] [-n frames] [-s frame size] [-k sigma k] [-F Target Freq] [-l internal loop, bypass alsa]\n",
+			"Usage:%s [-D pcm device] [-f input file] [-n frames to capture] [-s frame size] [-k sigma k] [-F Target Freq] [-l internal loop, bypass alsa]\n",
 			argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
 	exit(0);
@@ -312,9 +312,14 @@ int main(int argc, char *argv[])
 
 	if (bat.input_file == NULL) {
 		/* No input file so we will generate our own sinusoid */
-		bat.frame_size=2;					/* SND_PCM_FORMAT_S16_LE */
-		bat.sinus_duration =  bat.rate;		/* Nb of frames for 1 second */
-		bat.sinus_duration += 2*bat.frames;	/* Play long enough to record frame_size frames */
+		bat.frame_size=2;						/* SND_PCM_FORMAT_S16_LE */
+		if (bat.frames) {
+			bat.sinus_duration =  bat.rate;		/* Nb of frames for 1 second */
+			bat.sinus_duration += 2*bat.frames;	/* Play long enough to record frame_size frames */
+		} else {
+			/* Special case where we want to generate a sine wave endlessly without capturing */
+			bat.sinus_duration = 0;
+		}
 	}
 
 	if (bat.local == false) {

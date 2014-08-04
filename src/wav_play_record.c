@@ -149,7 +149,7 @@ static int generate_input_data(FILE *fp, struct SNDPCMContainer sndpcm, int coun
 {
 	int err;
 	static int load = 0;
-	static int i = 0;;
+	static int i = 0;
 	int k;
 
 	if (fp != NULL) {
@@ -173,12 +173,14 @@ static int generate_input_data(FILE *fp, struct SNDPCMContainer sndpcm, int coun
 			}
 		}
 	} else {
-		if (load > pa_bat->sinus_duration)
+		if ((pa_bat->sinus_duration) && (load > pa_bat->sinus_duration))
 			return 1;
 
 		int16_t *buf = (int16_t *)sndpcm.buffer;
 		for (k = 0; k < count * 8 / sndpcm.frame_bits; k++) {
 			float sinus_f = sin(i++ * 2 * M_PI * pa_bat->target_freq / pa_bat->rate) * INT16_MAX;
+			if (i == pa_bat->rate)
+				i = 0;
 			*buf++ = (int16_t)(sinus_f);
 		}
 		load += (count * 8 / sndpcm.frame_bits);
@@ -224,7 +226,8 @@ void *play(void *bat_param)
 			goto fail_exit;
 		}
 	} else {
-		fprintf(stdout, "Playing generated audio sinusoids\n");
+		fprintf(stdout, "Playing generated audio sine wave");
+		pa_bat->sinus_duration == 0 ? fprintf(stdout," endlessly\n"):fprintf(stdout,"\n");
 	}
 
 	count = sndpcm.period_bytes;
@@ -334,6 +337,9 @@ void *record(void *bat_param)
 	WAVContainer_t wav;
 	int size, offset, count, frames;
 	struct bat *pa_bat = (struct bat *) bat_param;
+
+	if (pa_bat->sinus_duration == 0 && pa_bat->input_file==NULL)
+		return 0;							/* No capture when in mode: play sine wave endlessly */
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	fprintf(stdout, "Enter record thread!\n");
