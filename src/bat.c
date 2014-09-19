@@ -29,7 +29,7 @@
 static void usage(char *argv[])
 {
 	fprintf(stdout,
-			"Usage:%s [-D pcm device] [-f input file] [-n frames to capture] [-s frame size] [-k sigma k] [-F Target Freq] [-l internal loop, bypass alsa]\n",
+			"Usage:%s [-D pcm device] [-Dp pcm playback device] [-Dc pcm capture device] [-f input file] [-n frames to capture] [-s frame size] [-k sigma k] [-F Target Freq] [-l internal loop, bypass alsa]\n",
 			argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
 	exit(0);
@@ -270,15 +270,26 @@ int main(int argc, char *argv[])
 	bat.frames = bat.rate;
 	bat.target_freq = 997.0;
 	bat.sigma_k = 3.0;
-	bat.device = NULL;
+	bat.playback_device = NULL;
+	bat.capture_device = NULL;
 	bat.buf = NULL;
 	bat.local = false;
 
 	/* Parse options */
-	while ((opt = getopt(argc, argv, "hf:s:n:F:c:r:k:D:l::")) != -1) {
+	while ((opt = getopt(argc, argv, "hf:s:n:F:c:r:k:D:P:C:l::")) != -1) {
 		switch (opt) {
 		case 'D':
-			bat.device = optarg;
+			if (bat.playback_device == NULL) {
+				bat.playback_device = optarg;
+			}
+			if (bat.capture_device == NULL) {
+				bat.capture_device = optarg;
+			}
+		case 'P':
+			bat.playback_device = optarg;
+			break;
+		case 'C':
+			bat.capture_device = optarg;
 			break;
 		case 'f':
 			bat.input_file = optarg;

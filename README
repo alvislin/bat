@@ -26,15 +26,17 @@ errors by comparing the captured audio PCM data to the original PCM data.
 BAT should be used as this :
 
 - To play a sinus wav file sampled at 44100Hz on one channel with 16bits per sample, record it for 88200 frames (2s) and find the main harmonic at 1000Hz
-    bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav
-  
+	bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav
+or	bat -P plughw:0,3 -C plughw:0,0 -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav
+
 - To test analysis part of BAT. Play file.wav sampled at 441000Hz on one channel with 16bits per sample, and verify main harmonic of file.wav is at 1000Hz
 	bat -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav -l
 	
 - To generate internally a sinusoide sampled a 44100Hz on one channel, record it for 88200 frames and find the main harmonic at 1000Hz
-    bat -D plughw:0,0 -r 44100 -c 1 -n 88200 -F 1000
+	bat -D plughw:0,0 -r 44100 -c 1 -n 88200 -F 1000
 
-Where D is pcm device number, r is sample rate of input file, c is number of channels, s is frame size in bytes, 
+Where D is pcm device number, P is pcm playback device, C is pcm capture device, (if P and C used, D is ignored)   
+r is sample rate of input file, c is number of channels, s is frame size in bytes, 
 n is number of frames to be analysed, f is input file and F is target frequency.
 Normally input is a sinus and target frequency is the frequency of the sinus.
 You need to connect playback to capture through an audio jack cable. 

@@ -199,8 +199,8 @@ void *play(void *bat_param)
 
 	fprintf(stdout, "Enter play thread!\n");
 	memset(&sndpcm, 0, sizeof(sndpcm));
-	if (NULL != pa_bat->device) {
-		err = snd_pcm_open(&sndpcm.handle, pa_bat->device,
+	if (NULL != pa_bat->playback_device) {
+		err = snd_pcm_open(&sndpcm.handle, pa_bat->playback_device,
 				SND_PCM_STREAM_PLAYBACK, 0);
 		if (err < 0) {
 			fprintf(stderr, "Unable to open pcm device: %s\n",
@@ -344,8 +344,8 @@ void *record(void *bat_param)
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	fprintf(stdout, "Enter record thread!\n");
 	memset(&sndpcm, 0, sizeof(sndpcm));
-	if (NULL != pa_bat->device) {
-		err = snd_pcm_open(&sndpcm.handle, pa_bat->device,
+	if (NULL != pa_bat->capture_device) {
+		err = snd_pcm_open(&sndpcm.handle, pa_bat->capture_device,
 				SND_PCM_STREAM_CAPTURE, 0);
 		if (err < 0) {
 			fprintf(stderr, "Unable to open pcm device: %s\n",

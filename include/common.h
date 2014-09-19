@@ -13,7 +13,8 @@ struct bat {
 
         int sinus_duration;
 
-        char *device;
+        char *playback_device;
+	char *capture_device;
         char *input_file;
         void *buf;      /* PCM Buffer */
         double *in;
