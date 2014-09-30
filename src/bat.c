@@ -285,6 +285,7 @@ int main(int argc, char *argv[])
 			if (bat.capture_device == NULL) {
 				bat.capture_device = optarg;
 			}
+			break;
 		case 'P':
 			bat.playback_device = optarg;
 			break;
