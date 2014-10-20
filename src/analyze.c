@@ -1,0 +1,270 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+#include <math.h>
+#include <fftw3.h>
+
+#include "common.h"
+
+/*
+ * Convert from sample size to double
+ */
+static void convert(struct bat *bat, struct analyze *a)
+{
+	void *s = a->buf;
+	int i;
+
+	for (i = 0; i < bat->frames; i++) {
+		switch (bat->sample_size) {
+		case 1:
+			a->in[i] = ((int8_t *) s)[i];
+			break;
+		case 2:
+			a->in[i] = ((int16_t *) s)[i];
+			break;
+		case 4:
+			a->in[i] = ((int32_t *) s)[i];
+			break;
+		default:
+			fprintf(stderr, "Unsupported sample size!\n");
+			break;
+		}
+	}
+}
+
+/*
+ * Search for main frequencies in fft results and compare it to target
+ */
+static int check(struct bat *bat, struct analyze *a)
+{
+	float Hz = 1.0 / ((float) bat->frames / (float) bat->rate);
+	float mean = 0.0, t, sigma = 0.0, p = 0.0;
+	int i, start = -1, end = -1, peak = 0, signals = 0;
+	int ret = 0, N = bat->frames / 2;
+
+	/* calculate mean */
+	for (i = 0; i < N; i++) {
+		mean += a->mag[i];
+	}
+	mean /= (float) N;
+
+	/* calculate standard deviation */
+	for (i = 0; i < N; i++) {
+		t = a->mag[i] - mean;
+		t *= t;
+		sigma += t;
+	}
+	sigma /= (float) N;
+	sigma = sqrtf(sigma);
+
+	/* clip any data less than k sigma + mean */
+	for (i = 0; i < N; i++) {
+		if (a->mag[i] > mean + bat->sigma_k * sigma) {
+
+			/* find peak start points */
+			if (start == -1) {
+				start = i;
+				peak = i;
+				end = i;
+				p = 0;
+				signals++;
+			} else {
+				if (a->mag[i] > a->mag[peak])
+					peak = i;
+				end = i;
+			}
+
+			//fprintf(stdout, "%5.1f Hz %2.2f dB\n",
+			//	(i + 1) * Hz, 10.0 * log10(bat->mag[i] / mean));
+			p += a->mag[i];
+		} else {
+
+			/* find peak end point */
+			if (end != -1) {
+				fprintf(stdout, "Detected peak at %2.2f Hz of %2.2f dB\n", (peak + 1) * Hz,
+						10.0 * log10(a->mag[peak] / mean));
+				fprintf(stdout, " Total %3.1f dB from %2.2f to %2.2f Hz\n", 10.0 * log10(p / mean), (start + 1) * Hz,
+						(end + 1) * Hz);
+				if ((peak + 1) * Hz > 1.99 && (peak + 1) * Hz < 7.01) {
+					fprintf(stdout, "Warning: there is too low peak %2.2f Hz, very close to DC\n", (peak + 1) * Hz);
+				} else if ((peak + 1) * Hz < bat->target_freq - 1.0) {
+					fprintf(stdout, " FAIL: Peak freq too low %2.2f Hz\n", (peak + 1) * Hz);
+					ret = -EIO;
+				} else if ((peak + 1) * Hz > bat->target_freq + 1.0) {
+					fprintf(stdout, " FAIL: Peak freq too high %2.2f Hz\n", (peak + 1) * Hz);
+					ret = -EIO;
+				} else {
+					fprintf(stdout, " PASS: Peak detected at target frequency\n");
+					ret = 0;
+				}
+				if (signals >= 10)
+					break;
+				end = -1;
+				start = -1;
+			}
+		}
+	}
+	if (signals == 0)
+		ret = -EIO;
+
+	fprintf(stdout, "Detected at least %d signal(s) in total\n", signals);
+	fprintf(stdout, "\nReturn value is %d\n", ret);
+
+	return ret;
+}
+
+static void calc_magnitude(struct bat *bat, struct analyze *a, int N)
+{
+	double r2, i2;
+	int i;
+
+	for (i = 1; i < N / 2; i++) {
+		r2 = a->out[i] * a->out[i];
+		i2 = a->out[N - i - 1] * a->out[N - i - 1];
+
+		a->mag[i] = sqrt(r2 + i2);
+	}
+	a->mag[0] = 0.0;
+}
+
+static int find_and_check_harmonics(struct bat *bat, struct analyze *a)
+{
+	fftw_plan p;
+	int ret = -ENOMEM, N = bat->frames;
+
+	/* Allocate FFT buffers */
+	a->in = (double*) fftw_malloc(sizeof(double) * bat->frames);
+	if (a->in == NULL)
+		goto out1;
+
+	a->out = (double*) fftw_malloc(sizeof(double) * bat->frames);
+	if (a->out == NULL)
+		goto out2;
+
+	a->mag = (double*) fftw_malloc(sizeof(double) * bat->frames);
+	if (a->mag == NULL)
+		goto out3;
+
+	/* create FFT plan */
+	p = fftw_plan_r2r_1d(N, a->in, a->out, FFTW_R2HC, FFTW_MEASURE | FFTW_PRESERVE_INPUT);
+	if (p == NULL)
+		goto out4;
+
+	/* convert source PCM to doubles */
+	convert(bat, a);
+
+	/* run FFT */
+	fftw_execute(p);
+
+	/* FFT out is real and imaginary numbers - calc magnitude for each */
+	calc_magnitude(bat, a, N);
+
+	/* check data */
+	ret = check(bat, a);
+
+	fftw_destroy_plan(p);
+
+out4:
+	fftw_free(a->mag);
+out3:
+	fftw_free(a->out);
+out2:
+	fftw_free(a->in);
+out1:
+	return ret;
+}
+
+/*
+ * Convert interleaved samples from channels in samples from a single channel
+ */
+int reorder_data(struct bat *bat)
+{
+	char *p, *new_bat_buf;
+	int ch, i, j;
+
+	if (bat->channels == 1)
+		return 0; /* No need for reordering */
+
+	p = malloc(bat->frames * bat->frame_size);
+	new_bat_buf = p;
+	if (p == NULL) {
+		return -ENOMEM;
+	}
+	for (ch = 0; ch < bat->channels; ch++) {
+		for (j = 0; j < bat->frames; j += 1) {
+			for (i = 0; i < bat->sample_size; i++) {
+				*p++ = ((char *) (bat->buf))[j * bat->frame_size + ch * bat->sample_size + i];
+			}
+		}
+	}
+
+	free(bat->buf);
+	bat->buf = new_bat_buf;
+
+	return 0;
+}
+
+int analyze_capture(struct bat *bat)
+{
+	int ret = -EINVAL;
+	size_t items;
+	int c;
+
+	fprintf(stdout, "\nBAT analysed signal is %d frames at %d Hz, %d channels, %d bytes per sample\n\n", bat->frames,
+			bat->rate, bat->channels, bat->sample_size);
+	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n\n", bat->target_freq);
+
+	bat->fp = fopen(bat->output_file, "rb");
+	if (bat->fp == NULL) {
+		fprintf(stderr, "failed to open %s\n", bat->output_file);
+		return -ENOENT;
+	}
+
+	bat->buf = malloc(bat->frames * bat->frame_size);
+	if (bat->buf == NULL) {
+		fclose(bat->fp);
+		return -ENOMEM;
+	}
+
+	// Skip header
+	skip_wav_header(bat); /* FIXME check return value */
+
+	items = fread(bat->buf, bat->frame_size, bat->frames, bat->fp);
+	if (items != bat->frames) {
+		ret = -EIO;
+		goto out;
+	}
+
+	reorder_data(bat);
+
+	for (c = 0; c < bat->channels; c++) {
+		struct analyze a;
+
+		printf("Channel: %i\n", c + 1);
+		a.buf = bat->buf + (c * bat->frames * bat->frame_size / bat->channels);
+		ret = find_and_check_harmonics(bat, &a);
+	}
+
+	out: fclose(bat->fp);
+	free(bat->buf);
+	return ret;
+}

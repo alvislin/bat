@@ -21,225 +21,50 @@
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
-#include <fftw3.h>
-#include <math.h>
-#include "common.h"
+#include <pthread.h>
+
+#include "config.h"
+
 #include "wav_play_record.h"
+#include "wav_play_record_tiny.h"
 
-static void usage(char *argv[])
+#include "common.h"
+#include "analyze.h"
+
+static void convert_alsa_device_string_to_tiny_card_and_device(char *alsa_device, unsigned int *tiny_card,
+		unsigned int *tiny_device)
 {
-	fprintf(stdout,
-			"Usage:%s [-D pcm device] [-Dp pcm playback device] [-Dc pcm capture device] [-f input file] [-n frames to capture] [-s frame size] [-k sigma k] [-F Target Freq] [-l internal loop, bypass alsa]\n",
-			argv[0]);
-	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
-	exit(0);
+	char *tmp1, *tmp2, *tmp3;
+
+	tmp1 = strchr(alsa_device, ':');
+	tmp3 = tmp1 + 1;
+	tmp2 = strchr(tmp3, ',');
+	tmp1 = tmp2 + 1;
+	*tiny_device = atoi(tmp1);
+	*tmp2 = '\0';
+	*tiny_card = atoi(tmp3);
+	*tmp2 = ',';
+
 }
-
-static void calc_magnitude(struct bat *bat, int N)
-{
-	double r2, i2;
-	int i;
-
-	for (i = 1; i < N / 2; i++) {
-		r2 = bat->out[i] * bat->out[i];
-		i2 = bat->out[N - i - 1] * bat->out[N - i - 1];
-
-		bat->mag[i] = sqrt(r2 + i2);
-	}
-	bat->mag[0] = 0.0;
-}
-
-static double hanning (int i, int nn)
-{
-  return ( 0.5 * (1.0 - cos (2.0*M_PI*(double)i/(double)(nn-1))) );
-}
-
-/* hard coded atm to only accept short to double conversion */
-static void convert(struct bat *bat)
-{
-	short *s = bat->buf;
-	int i;
-
-	for (i = 0; i < bat->frames; i++)
-		bat->in[i] = s[i] * hanning(i,bat->frames);
-}
-
-/* hard coded for rate of 44100 Hz atm */
-static int check(struct bat *bat)
-{
-	float Hz = 2.0 / ((float) bat->frames / (float) bat->rate);
-	float mean = 0.0, t, sigma = 0.0, p = 0.0;
-	int i, start = -1, end = -1, peak = 0, signals = 0;
-	int ret = 0, N = bat->frames / 2;
-
-	/* calculate mean */
-	for (i = 0; i < N; i++)
-		mean += bat->mag[i];
-	mean /= (float) N;
-
-	/* calculate standard deviation */
-	for (i = 0; i < N; i++) {
-		t = bat->mag[i] - mean;
-		t *= t;
-		sigma += t;
-	}
-	sigma /= (float) N;
-	sigma = sqrtf(sigma);
-
-	/* clip any data less than k sigma + mean */
-	for (i = 0; i < N; i++) {
-		if (bat->mag[i] > mean + bat->sigma_k * sigma) {
-
-			/* find peak start points */
-			if (start == -1) {
-				start = i;
-				peak = i;
-				end = i;
-				p = 0;
-				signals++;
-			} else {
-				if (bat->mag[i] > bat->mag[peak])
-					peak = i;
-				end = i;
-			}
-
-			//fprintf(stdout, "%5.1f Hz %2.2f dB\n",
-			//	(i + 1) * Hz, 10.0 * log10(bat->mag[i] / mean));
-			p += bat->mag[i];
-		} else {
-
-			/* find peak end point */
-			if (end != -1) {
-				fprintf(stdout, "Detected peak at %2.2f Hz of %2.2f dB\n",
-						(peak + 1) * Hz, 10.0 * log10(bat->mag[peak] / mean));
-				fprintf(stdout, " Total %3.1f dB from %2.2f to %2.2f Hz\n",
-						10.0 * log10(p / mean), (start + 1) * Hz,
-						(end + 1) * Hz);
-				if ((peak + 1) * Hz > 1.99 && (peak + 1) * Hz < 7.01) {
-					fprintf(stdout,
-							"Warning: there is too low peak %2.2f Hz, very close to DC\n",
-							(peak + 1) * Hz);
-				} else if ((peak + 1) * Hz < bat->target_freq - 1.0) {
-					fprintf(stdout, " FAIL: Peak freq too low %2.2f Hz\n",
-							(peak + 1) * Hz);
-					ret = -EINVAL;
-				} else if ((peak + 1) * Hz > bat->target_freq + 1.0) {
-					fprintf(stdout, " FAIL: Peak freq too high %2.2f Hz\n",
-							(peak + 1) * Hz);
-					ret = -EINVAL;
-				} else {
-					fprintf(stdout, " PASS: Peak detected at target frequency\n");
-					ret = 0;
-				}
-
-				end = -1;
-				start = -1;
-			}
-		}
-	}
-	fprintf(stdout, "Detected %d signal(s) in total\n", signals);
-	fprintf(stdout, "\nReturn value is %d\n", ret);
-
-	return ret;
-}
-
-static int fft(struct bat *bat)
-{
-	fftw_plan p;
-	int ret = -ENOMEM, N = bat->frames / 2;
-
-	/* Allocate FFT buffers */
-	bat->in = (double*) fftw_malloc(sizeof(double) * bat->frames);
-	if (bat->in == NULL)
-		goto out;
-
-	bat->out = (double*) fftw_malloc(sizeof(double) * bat->frames);
-	if (bat->out == NULL)
-		goto out;
-
-	bat->mag = (double*) fftw_malloc(sizeof(double) * bat->frames);
-	if (bat->mag == NULL)
-		goto out;
-
-	/* create FFT plan */
-	p = fftw_plan_r2r_1d(N, bat->in, bat->out, FFTW_R2HC,
-			FFTW_MEASURE | FFTW_PRESERVE_INPUT);
-	if (p == NULL)
-		goto out;
-
-	/* convert source PCM to doubles */
-	convert(bat);
-
-	/* run FFT */
-	fftw_execute(p);
-
-	/* FFT out is real and imaginary numbers - calc magnitude for each */
-	calc_magnitude(bat, N);
-
-	/* check data */
-	ret = check(bat);
-
-	fftw_destroy_plan(p);
-
-out:
-	fftw_free(bat->in);
-	fftw_free(bat->out);
-	fftw_free(bat->mag);
-
-	return ret;
-}
-
-static int file_load(struct bat *bat, char *file)
-{
-	FILE *in_file;
-	int ret = -EINVAL;
-	size_t items;
-
-	in_file = fopen(file, "rb");
-	if (in_file == NULL) {
-		fprintf(stderr, "failed to open %s\n", file);
-		return -ENOENT;
-	}
-
-	bat->buf = malloc(bat->frames * bat->frame_size);
-	if (bat->buf == NULL) {
-		fclose(in_file);
-		return -ENOMEM;
-	}
-
-	items = fread(bat->buf, bat->frame_size, bat->frames, in_file);
-	if (items != bat->frames) {
-		ret = -EIO;
-		goto out;
-	}
-
-	ret = fft(bat);
-
-out:
-	fclose(in_file);
-	free(bat->buf);
-	return ret;
-}
-
-static void play_and_record_alsa(struct bat* bat)
+static void create_play_and_record_thread(struct bat* bat)
 {
 	int ret;
 	pthread_t record_id, play_id;
 	int* thread_ret;
 
-	ret = pthread_create(&play_id, NULL, play, (void *) bat);
+	ret = pthread_create(&play_id, NULL, bat->playback, (void *) bat);
 
 	if (0 != ret) {
-		fprintf(stdout, "Create play thread error!\n");
+		fprintf(stdout, "Create playback thread error!\n");
 		pthread_cancel(record_id);
 		exit(1);
 	}
 
-	sleep(1);	/* Let time for playing something before recording */
+	sleep(1); /* Let time for playing something before recording *//* FIXME should be either removed or reduced! */
 
-	ret = pthread_create(&record_id, NULL, record, (void *) bat);
+	ret = pthread_create(&record_id, NULL, bat->capture, (void *) bat);
 	if (0 != ret) {
-		fprintf(stdout, "Create record thread error!\n");
+		fprintf(stdout, "Create capture thread error!\n");
 		exit(1);
 	}
 
@@ -247,7 +72,7 @@ static void play_and_record_alsa(struct bat* bat)
 	fprintf(stdout, "Play thread exit!\n");
 	pthread_cancel(record_id);
 	if (0 != *thread_ret) {
-		fprintf(stdout, "Return value of Play thread is %x!\n", *thread_ret);
+		fprintf(stdout, "Return value of playback thread is %x!\n", *thread_ret);
 		fprintf(stdout, "Sound played fail!\n");
 		exit(1);
 	}
@@ -255,102 +80,170 @@ static void play_and_record_alsa(struct bat* bat)
 	fprintf(stdout, "Record thread exit!\n");
 }
 
-int main(int argc, char *argv[])
+static void usage(char *argv[])
 {
-	struct bat bat;
-	int ret, opt;
-	char *file;
+	fprintf(stdout, "Usage:%s [-D pcm device] [-P pcm playback device] [-C pcm capture device] [-f input file] "
+			"[-s sample size] [-c number of channels] [-r sampling rate] "
+			"[-n frames to capture] [-k sigma k] [-F Target Freq] "
+			"[-l internal loop, bypass alsa] [-t use tinyalsa instead of alsa]\n", argv[0]);
+	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
+	exit(0);
+}
 
-	memset(&bat, 0, sizeof(bat));
+void create_bat_struct(struct bat *bat)
+{
+	memset(bat, 0, sizeof(struct bat));
 
 	/* Set default values */
-	bat.rate = 44100;
-	bat.channels = 1;
-	bat.frame_size = 2;
-	bat.frames = bat.rate;
-	bat.target_freq = 997.0;
-	bat.sigma_k = 3.0;
-	bat.playback_device = NULL;
-	bat.capture_device = NULL;
-	bat.buf = NULL;
-	bat.local = false;
+	bat->rate = 44100;
+	bat->channels = 1;
+	bat->frame_size = 2;
+	bat->sample_size = 2;
+	bat->frames = bat->rate * 2;
+	bat->target_freq = 997.0;
+	bat->sigma_k = 3.0;
+	bat->playback_device = NULL;
+	bat->capture_device = NULL;
+	bat->buf = NULL;
+	bat->local = false;
+	bat->playback = &playback_alsa;
+	bat->capture = &record_alsa;
+	bat->tinyalsa = false;
+}
 
-	/* Parse options */
-	while ((opt = getopt(argc, argv, "hf:s:n:F:c:r:k:D:P:C:l::")) != -1) {
+static void parse_arguments(struct bat *bat, int argc, char *argv[])
+{
+	int opt;
+
+	while ((opt = getopt(argc, argv, "hf:s:n:c:F:r:D:P:C:k::l::t::")) != -1) {
 		switch (opt) {
 		case 'D':
-			if (bat.playback_device == NULL) {
-				bat.playback_device = optarg;
+			if (bat->playback_device == NULL) {
+				bat->playback_device = optarg;
 			}
-			if (bat.capture_device == NULL) {
-				bat.capture_device = optarg;
+			if (bat->capture_device == NULL) {
+				bat->capture_device = optarg;
 			}
 			break;
 		case 'P':
-			bat.playback_device = optarg;
+			bat->playback_device = optarg;
 			break;
 		case 'C':
-			bat.capture_device = optarg;
+			bat->capture_device = optarg;
 			break;
 		case 'f':
-			bat.input_file = optarg;
+			bat->input_file = optarg;
 			break;
 		case 'n':
-			bat.frames = atoi(optarg);
+			bat->frames = atoi(optarg);
 			break;
 		case 'F':
-			bat.target_freq = atof(optarg);
+			bat->target_freq = atof(optarg);
 			break;
-		case 'c': /* ignored atm - to be implemented */
-			bat.channels = atoi(optarg);
+		case 'c':
+			bat->channels = atoi(optarg);
 			break;
 		case 'r':
-			bat.rate = atoi(optarg);
+			bat->rate = atoi(optarg);
 			break;
 		case 's':
-			bat.frame_size = atoi(optarg);
+			bat->sample_size = atoi(optarg);
 			break;
 		case 'k':
-			bat.sigma_k = atof(optarg);
+			bat->sigma_k = atof(optarg);
 			break;
 		case 'l':
-			bat.local = true;
+			bat->local = true;
+			break;
+		case 't':
+#ifdef HAVE_LIBTINYALSA
+			bat->playback = &playback_tinyalsa;
+			bat->capture = &record_tinyalsa;
+			bat->tinyalsa = true;
+#else
+			fprintf(stdout,"You don't have tinyalsa installed!\n");
+			exit(-EINVAL);
+#endif
 			break;
 		case 'h':
 		default: /* '?' */
 			usage(argv);
 		}
 	}
+}
 
-	if (bat.input_file == NULL) {
-		/* No input file so we will generate our own sinusoid */
-		bat.frame_size=2;						/* SND_PCM_FORMAT_S16_LE */
-		if (bat.frames) {
-			bat.sinus_duration =  bat.rate;		/* Nb of frames for 1 second */
-			bat.sinus_duration += 2*bat.frames;	/* Play long enough to record frame_size frames */
+void check_bat_struct(struct bat *bat)
+{
+	if ((bat->local == true) && (bat->output_file == NULL)) {
+		fprintf(stderr, "You have to specify an input file for local testing!\n");
+		exit(-EINVAL);
+	}
+	if (bat->channels > 2 || bat->channels < 1) {
+		fprintf(stderr, "BAT only supports 1 or 2 channels for now.\n");
+		exit(-EINVAL);
+	}
+
+}
+void set_bat_struct(struct bat *bat)
+{
+	int ret;
+
+	/* Determine capture file */
+	if (bat->local == true)
+		bat->output_file = bat->input_file;
+	else
+		bat->output_file = TEMP_RECORD_FILE_NAME;
+
+	/* Determine tiny device if needed */
+	if (bat->tinyalsa == true) {
+		convert_alsa_device_string_to_tiny_card_and_device(bat->capture_device, &bat->capture_card_tiny,
+				&bat->capture_device_tiny);
+		convert_alsa_device_string_to_tiny_card_and_device(bat->playback_device, &bat->playback_card_tiny,
+				&bat->playback_device_tiny);
+	}
+
+	if (bat->input_file == NULL) {
+		/* No input file so we will generate our own sine wave */
+		if (bat->frames) {
+			bat->sinus_duration = bat->rate; /* Nb of frames for 1 second */
+			bat->sinus_duration += 2 * bat->frames; /* Play long enough to capture frame_size frames */
 		} else {
 			/* Special case where we want to generate a sine wave endlessly without capturing */
-			bat.sinus_duration = 0;
+			bat->sinus_duration = 0;
 		}
-	}
-
-	if (bat.local == false) {
-		play_and_record_alsa(&bat);
-		file = TEMP_RECORD_FILE_NAME;
 	} else {
-		file = bat.input_file;
-		if (file == NULL) {
-			fprintf(stdout,"You have to specify an input file for local testing!\n");
+		bat->fp = fopen(bat->input_file, "rb");
+		if (bat->fp == NULL) {
+			fprintf(stderr, "Cannot access %s: No such file\n", bat->input_file);
 			exit(-1);
 		}
+		ret = read_wav_header(bat);
+		if (ret == -1)
+			exit(-1);
 	}
 
-	fprintf(stdout,
-			"\nBAT analysed signal is %d frames at %d Hz, %d channels, frame size %d bytes\n\n",
-			bat.frames, bat.rate, bat.channels, bat.frame_size);
-	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n\n",
-			bat.target_freq);
+	bat->frame_size = bat->sample_size * bat->channels;
 
-	ret = file_load(&bat, file);
+}
+
+int main(int argc, char *argv[])
+{
+	struct bat bat;
+	int ret;
+
+	create_bat_struct(&bat);
+
+	parse_arguments(&bat, argc, argv);
+
+	set_bat_struct(&bat);
+
+	check_bat_struct(&bat);
+
+	if (bat.local == false) {
+		create_play_and_record_thread(&bat);
+	}
+
+	ret = analyze_capture(&bat);
+
 	return ret;
 }

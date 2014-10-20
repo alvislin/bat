@@ -5,4 +5,10 @@ bin_PROGRAMS = bat
 
 bat_SOURCES = \
 	bat.c \
- 	wav_play_record.c
+	common.c \
+	analyze.c \
+	wav_play_record.c
+	
+if TINYALSA
+bat_SOURCES += wav_play_record_tiny.c
+endif

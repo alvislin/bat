@@ -6,15 +6,27 @@ BAT can also mean a small flying mammal with big ears and good hearing OR Basic
 Audio Tester OR Basic ALSA Tester. Take your pick.
 
 
+Requirements
+============
+If you want to use -t option, the library tinyalsa is required for compilation
+and linking.
+You can get it from here: https://github.com/tinyalsa/tinyalsa.git
+Compile it: 
+	make all
+Install it: 
+	copy include/tinyalsa/asoundlib.h to /usr/include/tinyalsa/asoundlib.h
+	copy libtinyalsa.so to /usr/lib/x86_64-linux-gnu 
+	  (or i386-linux-gnu for 32b system)
+
+
 Install
 =======
 
-BAT can be installed by running :-
-
-./autogen.sh
-./configure
-make
-make install
+BAT can be installed by running :
+	./autogen.sh
+	./configure
+	make
+	make install
 
 
 Usage
@@ -25,48 +37,71 @@ errors by comparing the captured audio PCM data to the original PCM data.
 
 BAT should be used as this :
 
-- To play a sinus wav file sampled at 44100Hz on one channel with 16bits per sample, record it for 88200 frames (2s) and find the main harmonic at 1000Hz
-	bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav
-or	bat -P plughw:0,3 -C plughw:0,0 -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav
+1- Loopback through with a wav file as input
+    bat -D plughw:0,0 -f file.wav -F 250 [-l] [-t]
+    bat -P plughw:0,3 -C plughw:0,0 -f file.wav -F 1000 [-l] [-t]
+    
+2- Loopback with a auto generated sine wawe as input
+    bat -D plughw:0,0 -r 44100 -c 2 -s 2 -n 88200 -F 250 [-l]
+    bat -P plughw:0,3 -C plughw:0,0 -r 16000 -c 2 -s 2 -n 16000 -F 250 [-l]
+    
+3- Play endlessly a sinus wave at 44100Hz on one channel with 16bits per sample.
+	bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 0  
 
-- To test analysis part of BAT. Play file.wav sampled at 441000Hz on one channel with 16bits per sample, and verify main harmonic of file.wav is at 1000Hz
-	bat -r 44100 -c 1 -s 2 -n 88200 -F 1000 -f file.wav -l
-	
-- To generate internally a sinusoide sampled a 44100Hz on one channel, record it for 88200 frames and find the main harmonic at 1000Hz
-	bat -D plughw:0,0 -r 44100 -c 1 -n 88200 -F 1000
+Option -D, -P, -C are used to specific respectively the audio device for 
+ playback and capture, the audio device for playback and the audio device 
+ for capture
+Option -f is used to specify the input file (which should contain a sine 
+ wave of frequency given by -F argument)
+Option -F is used to specify the sine wave frequency
+Option -r is used to specify the sampling rate of the generated sine wave
+Option -c is used to specify the number of channels (1 or 2)
+Option -s is used to specify the number of bytes per sample (1,2 or 4)
+Option -n is used to specify the number of frames to be analyzed (if set to 0,
+ then no analyzis is done and it plays endlessly)
+Option -l is optional and used to test the analyzis part of BAT. The audio path
+ is not tested
+Option -t is optional and enable used of tinyalsa library instead of alsa
+ library. See requirements.
 
-Where D is pcm device number, P is pcm playback device, C is pcm capture device, (if P and C used, D is ignored)   
-r is sample rate of input file, c is number of channels, s is frame size in bytes, 
-n is number of frames to be analysed, f is input file and F is target frequency.
-Normally input is a sinus and target frequency is the frequency of the sinus.
 You need to connect playback to capture through an audio jack cable. 
-BAT will capture the playback of the input file and do a FFT to determine fundamental frequency of the input.
-BAT will return a negative result on any errors and 0 if fundamental frequency found is one specified in F argument.
+BAT will capture the playback of the input file and do a FFT to determine
+ fundamental frequency of the input.
+BAT will return a negative result on any errors and 0 if fundamental frequency
+ found is one specified in F argument.
 
 It can also be used to generate a continuous sine wave.
 
-- to play endlessly a sinus wave at 44100Hz on one channel with 16bits per sample.
-	bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 0  
+Notes
+=====
+If option -f is given, then parameter from arguments c, r, n and s are read from
+ file. This means that you can not use a raw wav file (so without header) as
+ these informations will be missing.
 
+Device name are specified in the ALSA format (even for tinyalsa)
+hwplug:x,y	or hw:x,y
+Where x is card number and y is device number
+You can get the list of cards and devices by typing the command:
+ aplay -l
+ 
+One frame represents one sample from all channels (so for 2 channels,
+ 1 frame equals 2 samples).
+ 
 
 Limitations
 =====
 - Input file length must be greater than 1s + number of frames.
-- Sinusoid generation is currently limited to 1 channel with a frame size of 2 bytes.
-- Input and output gain should be correctly set. Better is to use alsamixer to set 0dB gain for both input and output, otherwise you may have
-distortions during recording and it may lead to non detection of main harmonic. 
+- Input and output gain should be correctly set. Better is to use alsamixer to 
+ set 0dB gain for both input and output, otherwise you may have
+ distortions during recording and it may lead to non detection of main harmonic. 
 
 
 Future Plans
 ============
 
-1) Support other sample rates and channels.
+1) Detect gain changes, i.e. compare max signal against expected max.
 
-2) Add Sine wave generator.
-
-3) Detect gain changes, i.e. compare max signal against expected max.
-
-4) Test driver loopback stream latency i.e mesure the time it takes to receive
+2) Test driver loopback stream latency i.e mesure the time it takes to receive
    samples after playing them.
 
 

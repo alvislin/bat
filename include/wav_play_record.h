@@ -1,4 +1,6 @@
-#define TEMP_RECORD_FILE_NAME "/tmp/test.wav"
+extern int retval_play;
+extern int retval_record;
 
-void *play(void *bat_param);
-void *record(void *bat_param);
+void *playback_alsa(void *);
+void *record_alsa(void *);
+

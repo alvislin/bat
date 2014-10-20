@@ -29,3 +29,5 @@ ltmain.sh
 src/bat
 /.settings/
 /.autotools
+/*.launch
+

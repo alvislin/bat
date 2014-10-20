@@ -1,4 +1,4 @@
-AC_PREREQ([2.69])
+AC_PREREQ([2.68])
 
 AC_INIT([bat],[m4_esyscmd(./git-version-gen .tarball-version)],[liam.r.girdwood (at) intel (dot) com])
 
@@ -44,7 +44,7 @@ AC_PROG_INSTALL
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdint.h stdlib.h string.h unistd.h pthread.h])
+AC_CHECK_HEADERS([stdint.h stdlib.h string.h unistd.h pthread.h alsa/asoundlib.h tinyalsa/asoundlib.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_INLINE
@@ -53,14 +53,19 @@ AC_TYPE_UINT16_T
 AC_TYPE_UINT32_T
 AC_TYPE_UINT8_T
 
+tinyalsa=true
 # Checks for library functions.
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_CHECK_FUNCS([memset], , [AC_MSG_ERROR([Error: need memset])])
 AC_CHECK_LIB([fftw3], [fftw_malloc], , [AC_MSG_ERROR([Error: need FFTW3 library])])
 AC_CHECK_LIB([m], [sqrt], , [AC_MSG_ERROR([Error: Need sqrt])])
-AC_CHECK_LIB([asound], [snd_pcm_open], , [AC_MSG_ERROR([Error: need ASOUND library])])
 AC_CHECK_LIB([pthread], [pthread_create], , [AC_MSG_ERROR([Error: need PTHREAD library])])
+AC_CHECK_LIB([asound], [snd_pcm_open], , [AC_MSG_ERROR([Error: need ASOUND library])])
+AC_CHECK_LIB([tinyalsa], [pcm_start], ,[tinyalsa=false;AC_MSG_WARN([Warning: option -t won't work - see README for how to install tinyalsa library])])
+
+AM_CONDITIONAL([TINYALSA],[test x$tinyalsa = xtrue])
+AM_COND_IF([TINYALSA],[AC_MSG_NOTICE([TINYALSA defined])],[AC_MSG_NOTICE([TINYALSA not defined])])
 
 # Debug symbol support
 AC_ARG_ENABLE(debug, [AS_HELP_STRING([--enable-debug],[enable debug symbols])],
