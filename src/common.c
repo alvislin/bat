@@ -13,7 +13,6 @@
 #include "wav_play_record.h"
 #include "common.h"
 
-
 int retval_play = 0;
 int retval_record = 0;
 
@@ -90,7 +89,6 @@ int skip_wav_header(struct bat *bat)
 	return 0;
 }
 
-
 int read_wav_header(struct bat *bat)
 {
 	wavHeader_t riff_wave_header;
@@ -133,12 +131,12 @@ int read_wav_header(struct bat *bat)
 			}
 			bat->channels = chunk_fmt.channels;
 			bat->rate = chunk_fmt.sample_rate;
-			bat->sample_size = chunk_fmt.sample_length/8;
+			bat->sample_size = chunk_fmt.sample_length / 8;
 			bat->frame_size = chunk_fmt.blocks_align;
 
 			break;
 		case WAV_DATA:
-			bat->frames = chunk_header.length / bat->frame_size /2 ; /* FIXME The number of analysed captured frames is arbitrarily set to half of the number of frames */
+			bat->frames = chunk_header.length / bat->frame_size / 2; /* FIXME The number of analysed captured frames is arbitrarily set to half of the number of frames */
 			/* Stop looking for chunks */
 			more_chunks = 0;
 			break;
@@ -152,10 +150,8 @@ int read_wav_header(struct bat *bat)
 		}
 	} while (more_chunks);
 
-
 	return 0;
 }
-
 
 void prepare_wav_info(WAVContainer_t *wav, struct bat *bat)
 {
@@ -170,9 +166,8 @@ void prepare_wav_info(WAVContainer_t *wav, struct bat *bat)
 	wav->format.blocks_align = bat->channels * bat->sample_size;
 	wav->format.bytes_p_second = wav->format.blocks_align * bat->rate;
 	/* Default set time length to 10 seconds */
-	wav->chunk.length = 10 * wav->format.bytes_p_second;						/* FIXME could be set to number of frames ? given in cmd line */
+	wav->chunk.length = 10 * wav->format.bytes_p_second; /* FIXME could be set to number of frames ? given in cmd line */
 	wav->chunk.type = WAV_DATA;
-	wav->header.length = (wav->chunk.length) + sizeof(wav->chunk)
-			+ sizeof(wav->format) + sizeof(wav->header) - 8;
+	wav->header.length = (wav->chunk.length) + sizeof(wav->chunk) + sizeof(wav->format) + sizeof(wav->header) - 8;
 
 }

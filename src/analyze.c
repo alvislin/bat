@@ -260,7 +260,7 @@ int analyze_capture(struct bat *bat)
 	}
 
 	ret = reorder_data(bat);
-	if (ret !=0 )
+	if (ret != 0)
 		return ret;
 
 	for (c = 0; c < bat->channels; c++) {

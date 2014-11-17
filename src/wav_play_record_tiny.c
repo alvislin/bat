@@ -46,7 +46,8 @@ static int closed = 0;
 /**
  * Called when thread is finished
  */
-static void close_handle(void *handle) {
+static void close_handle(void *handle)
+{
 	struct pcm *pcm = handle;
 	if (NULL != pcm) {
 		pcm_close(pcm);
@@ -55,14 +56,16 @@ static void close_handle(void *handle) {
 /**
  * Handling of Ctrl-C for capture
  */
-static void sigint_handler(int sig) {
+static void sigint_handler(int sig)
+{
 	capturing = 0;
 }
 
 /**
  * Handling of Ctrl-C for playback
  */
-static void stream_close(int sig) {
+static void stream_close(int sig)
+{
 	/* allow the stream to be closed gracefully */
 	signal(sig, SIG_IGN);
 	closed = 1;
@@ -71,23 +74,22 @@ static void stream_close(int sig) {
 /**
  * Check that a parameter is inside bounds
  */
-static int check_param(struct pcm_params *params, unsigned int param,
-		unsigned int value, char *param_name, char *param_unit) {
+static int check_param(struct pcm_params *params, unsigned int param, unsigned int value, char *param_name,
+		char *param_unit)
+{
 	unsigned int min;
 	unsigned int max;
 	int is_within_bounds = 1;
 
 	min = pcm_params_get_min(params, param);
 	if (value < min) {
-		fprintf(stderr, "%s is %u%s, device only supports >= %u%s!\n",
-				param_name, value, param_unit, min, param_unit);
+		fprintf(stderr, "%s is %u%s, device only supports >= %u%s!\n", param_name, value, param_unit, min, param_unit);
 		is_within_bounds = 0;
 	}
 
 	max = pcm_params_get_max(params, param);
 	if (value > max) {
-		fprintf(stderr, "%s is %u%s, device only supports <= %u%s!\n",
-				param_name, value, param_unit, max, param_unit);
+		fprintf(stderr, "%s is %u%s, device only supports <= %u%s!\n", param_name, value, param_unit, max, param_unit);
 		is_within_bounds = 0;
 	}
 
@@ -99,8 +101,7 @@ static int generate_input_data(char *buffer, int size, struct bat *bat)
 	static int load = 0;
 	static int i = 0;
 	int num_read;
-	int k,l;
-
+	int k, l;
 
 	if (bat->playback_file != NULL) {
 		num_read = fread(buffer, 1, size, bat->fp);
@@ -113,43 +114,43 @@ static int generate_input_data(char *buffer, int size, struct bat *bat)
 
 		switch (bat->sample_size) {
 		case 1:
-			buf = (int8_t *)buffer;
+			buf = (int8_t *) buffer;
 			max = INT8_MAX;
 			break;
 		case 2:
-			buf = (int16_t *)buffer;
+			buf = (int16_t *) buffer;
 			max = INT16_MAX;
 			break;
 		case 4:
-			buf = (int32_t *)buffer;
+			buf = (int32_t *) buffer;
 			max = INT32_MAX;
 			break;
 		default:
-			fprintf(stderr,"Format not supported!\n");
+			fprintf(stderr, "Format not supported!\n");
 			return -1;
 		}
 
-		float sin_val = (float)bat->target_freq/(float)bat->rate;
-		for (k = 0; k < size/bat->channels/bat->sample_size; k++) {
+		float sin_val = (float) bat->target_freq / (float) bat->rate;
+		for (k = 0; k < size / bat->channels / bat->sample_size; k++) {
 			float sinus_f = sin(i++ * 2.0 * M_PI * sin_val) * max;
 			if (i == bat->rate)
 				i = 0;
-			for (l=0;l<bat->channels;l++) {
+			for (l = 0; l < bat->channels; l++) {
 				switch (bat->sample_size) {
 				case 1:
-					*((int8_t *)buf) = (int8_t)(sinus_f);
+					*((int8_t *) buf) = (int8_t) (sinus_f);
 					break;
 				case 2:
-					*((int16_t *)buf) = (int16_t)(sinus_f);
+					*((int16_t *) buf) = (int16_t) (sinus_f);
 					break;
 				case 4:
-					*((int32_t *)buf) = (int32_t)(sinus_f);
+					*((int32_t *) buf) = (int32_t) (sinus_f);
 					break;
 				}
 				buf += bat->sample_size;
 			}
 		}
-		load += (size/bat->channels/bat->sample_size);
+		load += (size / bat->channels / bat->sample_size);
 		num_read = size;
 	}
 
@@ -159,9 +160,9 @@ static int generate_input_data(char *buffer, int size, struct bat *bat)
 /**
  * Check all parameters
  */
-static int sample_is_playable(unsigned int card, unsigned int device,
-		unsigned int channels, unsigned int rate, unsigned int bits,
-		unsigned int period_size, unsigned int period_count) {
+static int sample_is_playable(unsigned int card, unsigned int device, unsigned int channels, unsigned int rate,
+		unsigned int bits, unsigned int period_size, unsigned int period_count)
+{
 	struct pcm_params *params;
 	int can_play;
 
@@ -172,14 +173,10 @@ static int sample_is_playable(unsigned int card, unsigned int device,
 	}
 
 	can_play = check_param(params, PCM_PARAM_RATE, rate, "Sample rate", "Hz");
-	can_play &= check_param(params, PCM_PARAM_CHANNELS, channels, "Sample",
-			" channels");
-	can_play &= check_param(params, PCM_PARAM_SAMPLE_BITS, bits, "Bitrate",
-			" bits");
-	can_play &= check_param(params, PCM_PARAM_PERIOD_SIZE, period_size,
-			"Period size", "Hz");
-	can_play &= check_param(params, PCM_PARAM_PERIODS, period_count,
-			"Period count", "Hz");
+	can_play &= check_param(params, PCM_PARAM_CHANNELS, channels, "Sample", " channels");
+	can_play &= check_param(params, PCM_PARAM_SAMPLE_BITS, bits, "Bitrate", " bits");
+	can_play &= check_param(params, PCM_PARAM_PERIOD_SIZE, period_size, "Period size", "Hz");
+	can_play &= check_param(params, PCM_PARAM_PERIODS, period_count, "Period count", "Hz");
 
 	pcm_params_free(params);
 
@@ -188,8 +185,8 @@ static int sample_is_playable(unsigned int card, unsigned int device,
 /**
  * Play sample
  */
-static unsigned int play_sample(unsigned int card, unsigned int device, struct bat *bat,
-		unsigned int period_size, unsigned int period_count)
+static unsigned int play_sample(unsigned int card, unsigned int device, struct bat *bat, unsigned int period_size,
+		unsigned int period_count)
 {
 	struct pcm_config config;
 	struct pcm *pcm;
@@ -219,15 +216,13 @@ static unsigned int play_sample(unsigned int card, unsigned int device, struct b
 	config.stop_threshold = 0;
 	config.silence_threshold = 0;
 
-	if (!sample_is_playable(card, device, bat->channels, bat->rate, bat->sample_size*8,
-			period_size, period_count)) {
+	if (!sample_is_playable(card, device, bat->channels, bat->rate, bat->sample_size * 8, period_size, period_count)) {
 		return 0;
 	}
 
 	pcm = pcm_open(card, device, PCM_OUT, &config);
 	if (!pcm || !pcm_is_ready(pcm)) {
-		fprintf(stderr, "Unable to open PCM device %u (%s)!\n", device,
-				pcm_get_error(pcm));
+		fprintf(stderr, "Unable to open PCM device %u (%s)!\n", device, pcm_get_error(pcm));
 		return 0;
 	}
 
@@ -239,13 +234,13 @@ static unsigned int play_sample(unsigned int card, unsigned int device, struct b
 		return 0;
 	}
 
-	printf("Playing sample: %u ch, %u hz, %u bits\n", bat->channels, bat->rate, bat->sample_size*8);
+	printf("Playing sample: %u ch, %u hz, %u bits\n", bat->channels, bat->rate, bat->sample_size * 8);
 
 	/* catch ctrl-c to shutdown cleanly */
 	signal(SIGINT, stream_close);
 
 	do {
-		num_read = generate_input_data(buffer,size,bat);
+		num_read = generate_input_data(buffer, size, bat);
 		if (num_read > 0) {
 			if (pcm_write(pcm, buffer, num_read)) {
 				fprintf(stderr, "Error playing sample!\n");
@@ -262,7 +257,8 @@ static unsigned int play_sample(unsigned int card, unsigned int device, struct b
 /**
  * Play
  */
-void *playback_tinyalsa(void *bat_param) {
+void *playback_tinyalsa(void *bat_param)
+{
 	unsigned int period_size = 1024;
 	unsigned int period_count = 4;
 	unsigned int ret;
@@ -274,7 +270,7 @@ void *playback_tinyalsa(void *bat_param) {
 
 	if (bat->playback_file == NULL) {
 		fprintf(stdout, "Playing generated audio sine wave");
-		bat->sinus_duration == 0 ? fprintf(stdout," endlessly\n"):fprintf(stdout,"\n");
+		bat->sinus_duration == 0 ? fprintf(stdout, " endlessly\n") : fprintf(stdout, "\n");
 	} else {
 		fprintf(stdout, "Playing input audio file: %s\n", bat->playback_file);
 	}
@@ -289,9 +285,9 @@ void *playback_tinyalsa(void *bat_param) {
 	pthread_exit(&retval_play);
 }
 
-static unsigned int capture_sample(FILE *file, unsigned int card, unsigned int device,
-		unsigned int channels, unsigned int rate, enum pcm_format format,
-		unsigned int period_size, unsigned int period_count) {
+static unsigned int capture_sample(FILE *file, unsigned int card, unsigned int device, unsigned int channels,
+		unsigned int rate, enum pcm_format format, unsigned int period_size, unsigned int period_count)
+{
 	struct pcm_config config;
 	struct pcm *pcm;
 	char *buffer;
@@ -307,7 +303,7 @@ static unsigned int capture_sample(FILE *file, unsigned int card, unsigned int d
 	config.stop_threshold = 0;
 	config.silence_threshold = 0;
 
-	printf("rate: %i, format: %i \n",config.rate,config.format);
+	printf("rate: %i, format: %i \n", config.rate, config.format);
 
 	pcm = pcm_open(card, device, PCM_IN, &config);
 	if (!pcm || !pcm_is_ready(pcm)) {
@@ -326,8 +322,7 @@ static unsigned int capture_sample(FILE *file, unsigned int card, unsigned int d
 	}
 	pthread_cleanup_push(destroy_mem, buffer);
 
-	printf("Capturing sample: %u ch, %u hz, %u bit\n", channels, rate,
-			pcm_format_to_bits(format));
+	printf("Capturing sample: %u ch, %u hz, %u bit\n", channels, rate, pcm_format_to_bits(format));
 
 	while (capturing && !pcm_read(pcm, buffer, size)) {
 		if (fwrite(buffer, 1, size, file) != size) {
@@ -350,16 +345,17 @@ static unsigned int capture_sample(FILE *file, unsigned int card, unsigned int d
 /**
  * Record
  */
-void *record_tinyalsa(void *bat_param) {
+void *record_tinyalsa(void *bat_param)
+{
 	FILE *file = NULL;
 	WAVContainer_t header;
-    unsigned int period_size = 1024;
-    unsigned int period_count = 4;
-    enum pcm_format format = 0;
-    unsigned int ret;
+	unsigned int period_size = 1024;
+	unsigned int period_count = 4;
+	enum pcm_format format = 0;
+	unsigned int ret;
 
 	struct bat *bat = (struct bat *) bat_param;
-	switch(bat->sample_size) {
+	switch (bat->sample_size) {
 	case 1:
 		format = PCM_FORMAT_S8;
 		break;
@@ -370,7 +366,7 @@ void *record_tinyalsa(void *bat_param) {
 		format = PCM_FORMAT_S32_LE;
 		break;
 	default:
-		fprintf(stderr,"Unsupported format!\n");
+		fprintf(stderr, "Unsupported format!\n");
 		goto fail_exit;
 	}
 
@@ -399,8 +395,8 @@ void *record_tinyalsa(void *bat_param) {
 	header.header.length = header.chunk.length + sizeof(header) - 8;
 
 	if (fwrite(&header.header, 1, sizeof(header.header), file) != sizeof(header.header)
-		|| fwrite(&header.format, 1, sizeof(header.format), file) != sizeof(header.format)
-		|| fwrite(&header.chunk, 1, sizeof(header.chunk), file) != sizeof(header.chunk)) {
+			|| fwrite(&header.format, 1, sizeof(header.format), file) != sizeof(header.format)
+			|| fwrite(&header.chunk, 1, sizeof(header.chunk), file) != sizeof(header.chunk)) {
 		fprintf(stderr, "Error write wav file header!\n");
 		goto fail_exit;
 	}
@@ -423,7 +419,7 @@ void *record_tinyalsa(void *bat_param) {
 
 	// Normally we will never reach this part of code (before fail_exit) as
 	//  this thread will be cancelled by end of play thread.
-    pthread_cleanup_pop(0);
+	pthread_cleanup_pop(0);
 
 	fclose(file);
 
