@@ -42,18 +42,18 @@ int skip_wav_header(struct bat *bat)
 
 	ret = fread(&riff_wave_header, sizeof(riff_wave_header), 1, bat->fp);
 	if (ret != 1) {
-		fprintf(stderr, "Error reading file %s\n", bat->output_file);
+		fprintf(stderr, "Error reading header of file %s!\n", bat->capture_file);
 		return -1;
 	}
 	if ((riff_wave_header.magic != WAV_RIFF) || (riff_wave_header.type != WAV_WAVE)) {
-		fprintf(stderr, "Error: '%s' is not a riff/wave file\n", bat->output_file);
+		fprintf(stderr, "Error: '%s' is not a riff/wave file!\n", bat->capture_file);
 		return -1;
 	}
 
 	do {
 		ret = fread(&chunk_header, sizeof(chunk_header), 1, bat->fp);
 		if (ret != 1) {
-			fprintf(stderr, "Error reading file %s\n", bat->output_file);
+			fprintf(stderr, "Error reading chunk of file %s!\n", bat->capture_file);
 			return -1;
 		}
 
@@ -61,12 +61,17 @@ int skip_wav_header(struct bat *bat)
 		case WAV_FMT:
 			ret = fread(&chunk_fmt, sizeof(chunk_fmt), 1, bat->fp);
 			if (ret != 1) {
-				fprintf(stderr, "Error reading file %s\n", bat->output_file);
+				fprintf(stderr, "Error reading chunk fmt of file %s!\n", bat->capture_file);
 				return -1;
 			}
 			/* If the format header is larger, skip the rest */
-			if (chunk_header.length > sizeof(chunk_fmt))
-				fseek(bat->fp, chunk_header.length - sizeof(chunk_fmt), SEEK_CUR);
+			if (chunk_header.length > sizeof(chunk_fmt)) {
+				ret = fseek(bat->fp, chunk_header.length - sizeof(chunk_fmt), SEEK_CUR);
+				if (ret == -1) {
+					fprintf(stderr, "Error skipping chunk fmt of file %s!\n", bat->capture_file);
+					return -1;
+				}
+			}
 			break;
 		case WAV_DATA:
 			/* Stop looking for chunks */
@@ -74,7 +79,11 @@ int skip_wav_header(struct bat *bat)
 			break;
 		default:
 			/* Unknown chunk, skip bytes */
-			fseek(bat->fp, chunk_header.length, SEEK_CUR);
+			ret = fseek(bat->fp, chunk_header.length, SEEK_CUR);
+			if (ret == -1) {
+				fprintf(stderr, "Error skipping unknown chunk of file %s!\n", bat->capture_file);
+				return -1;
+			}
 		}
 	} while (more_chunks);
 
@@ -92,18 +101,18 @@ int read_wav_header(struct bat *bat)
 
 	ret = fread(&riff_wave_header, sizeof(riff_wave_header), 1, bat->fp);
 	if (ret != 1) {
-		fprintf(stderr, "Error reading file %s\n", bat->output_file);
+		fprintf(stderr, "Error reading header of file %s!\n", bat->playback_file);
 		return -1;
 	}
 	if ((riff_wave_header.magic != WAV_RIFF) || (riff_wave_header.type != WAV_WAVE)) {
-		fprintf(stderr, "Error: '%s' is not a riff/wave file\n", bat->input_file);
+		fprintf(stderr, "Error: '%s' is not a riff/wave file!\n", bat->playback_file);
 		return -1;
 	}
 
 	do {
 		ret = fread(&chunk_header, sizeof(chunk_header), 1, bat->fp);
 		if (ret != 1) {
-			fprintf(stderr, "Error reading file %s\n", bat->output_file);
+			fprintf(stderr, "Error reading chunk of file %s!\n", bat->playback_file);
 			return -1;
 		}
 
@@ -111,12 +120,17 @@ int read_wav_header(struct bat *bat)
 		case WAV_FMT:
 			ret = fread(&chunk_fmt, sizeof(chunk_fmt), 1, bat->fp);
 			if (ret != 1) {
-				fprintf(stderr, "Error reading file %s\n", bat->output_file);
+				fprintf(stderr, "Error reading chunk fmt of file %s!\n", bat->playback_file);
 				return -1;
 			}
 			/* If the format header is larger, skip the rest */
-			if (chunk_header.length > sizeof(chunk_fmt))
-				fseek(bat->fp, chunk_header.length - sizeof(chunk_fmt), SEEK_CUR);
+			if (chunk_header.length > sizeof(chunk_fmt)) {
+				ret = fseek(bat->fp, chunk_header.length - sizeof(chunk_fmt), SEEK_CUR);
+				if (ret == -1) {
+					fprintf(stderr, "Error skipping chunk fmt of file %s!\n", bat->playback_file);
+					return -1;
+				}
+			}
 			bat->channels = chunk_fmt.channels;
 			bat->rate = chunk_fmt.sample_rate;
 			bat->sample_size = chunk_fmt.sample_length/8;
@@ -124,13 +138,17 @@ int read_wav_header(struct bat *bat)
 
 			break;
 		case WAV_DATA:
-			bat->frames = chunk_header.length / bat->frame_size /2 ; /* FIXME The number of analysed captured frames is equal to half of the number of frames */
+			bat->frames = chunk_header.length / bat->frame_size /2 ; /* FIXME The number of analysed captured frames is arbitrarily set to half of the number of frames */
 			/* Stop looking for chunks */
 			more_chunks = 0;
 			break;
 		default:
 			/* Unknown chunk, skip bytes */
-			fseek(bat->fp, chunk_header.length, SEEK_CUR);
+			ret = fseek(bat->fp, chunk_header.length, SEEK_CUR);
+			if (ret == -1) {
+				fprintf(stderr, "Error skipping unknown chunk of file %s!\n", bat->playback_file);
+				return -1;
+			}
 		}
 	} while (more_chunks);
 
@@ -139,7 +157,7 @@ int read_wav_header(struct bat *bat)
 }
 
 
-int prepare_wav_info(WAVContainer_t *wav, struct bat *bat)
+void prepare_wav_info(WAVContainer_t *wav, struct bat *bat)
 {
 	wav->header.magic = WAV_RIFF;
 	wav->header.type = WAV_WAVE;
@@ -157,5 +175,4 @@ int prepare_wav_info(WAVContainer_t *wav, struct bat *bat)
 	wav->header.length = (wav->chunk.length) + sizeof(wav->chunk)
 			+ sizeof(wav->format) + sizeof(wav->header) - 8;
 
-	return 0;
 }

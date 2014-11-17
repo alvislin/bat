@@ -49,35 +49,44 @@ static void convert_alsa_device_string_to_tiny_card_and_device(char *alsa_device
 static void create_play_and_record_thread(struct bat* bat)
 {
 	int ret;
-	pthread_t record_id, play_id;
-	int* thread_ret;
+	pthread_t capture_id, playback_id;
+	int *thread_playback_ret;
 
-	ret = pthread_create(&play_id, NULL, bat->playback, (void *) bat);
-
+	ret = pthread_create(&playback_id, NULL, bat->playback, (void *) bat);
 	if (0 != ret) {
 		fprintf(stdout, "Create playback thread error!\n");
-		pthread_cancel(record_id);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	sleep(1); /* Let time for playing something before recording *//* FIXME should be either removed or reduced! */
 
-	ret = pthread_create(&record_id, NULL, bat->capture, (void *) bat);
+	ret = pthread_create(&capture_id, NULL, bat->capture, (void *) bat);
 	if (0 != ret) {
 		fprintf(stdout, "Create capture thread error!\n");
-		exit(1);
+		pthread_cancel(playback_id);
+		exit(EXIT_FAILURE);
 	}
 
-	pthread_join(play_id, (void**) &thread_ret);
-	fprintf(stdout, "Play thread exit!\n");
-	pthread_cancel(record_id);
-	if (0 != *thread_ret) {
-		fprintf(stdout, "Return value of playback thread is %x!\n", *thread_ret);
-		fprintf(stdout, "Sound played fail!\n");
-		exit(1);
+	ret = pthread_join(playback_id, (void**) &thread_playback_ret);
+	if (ret != 0) {
+		fprintf(stdout, "Joining playback thread error!\n");
+		pthread_cancel(playback_id);
+		pthread_cancel(capture_id);
+		exit(EXIT_FAILURE);
 	}
-	pthread_join(record_id, NULL);
-	fprintf(stdout, "Record thread exit!\n");
+	fprintf(stdout, "Play thread exit.\n");
+	pthread_cancel(capture_id);
+	if (*thread_playback_ret != 0) {
+		fprintf(stderr, "Return value of playback thread is %x!\n", *thread_playback_ret);
+		fprintf(stderr, "Sound play fail!\n");
+		exit(EXIT_FAILURE);
+	}
+	ret = pthread_join(capture_id, NULL);
+	if (ret != 0) {
+		fprintf(stdout, "Joining capture thread error!\n");
+		exit(EXIT_FAILURE);
+	}
+	fprintf(stdout, "Record thread exit.\n");
 }
 
 static void usage(char *argv[])
@@ -87,10 +96,10 @@ static void usage(char *argv[])
 			"[-n frames to capture] [-k sigma k] [-F Target Freq] "
 			"[-l internal loop, bypass alsa] [-t use tinyalsa instead of alsa]\n", argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
-	exit(0);
+	exit(EXIT_FAILURE);
 }
 
-void create_bat_struct(struct bat *bat)
+static void create_bat_struct(struct bat *bat)
 {
 	memset(bat, 0, sizeof(struct bat));
 
@@ -132,7 +141,7 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 			bat->capture_device = optarg;
 			break;
 		case 'f':
-			bat->input_file = optarg;
+			bat->playback_file = optarg;
 			break;
 		case 'n':
 			bat->frames = atoi(optarg);
@@ -172,27 +181,27 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 	}
 }
 
-void check_bat_struct(struct bat *bat)
+static void check_bat_struct(struct bat *bat)
 {
-	if ((bat->local == true) && (bat->output_file == NULL)) {
+	if ((bat->local == true) && (bat->capture_file == NULL)) {
 		fprintf(stderr, "You have to specify an input file for local testing!\n");
-		exit(-EINVAL);
+		exit(EXIT_FAILURE);
 	}
 	if (bat->channels > 2 || bat->channels < 1) {
-		fprintf(stderr, "BAT only supports 1 or 2 channels for now.\n");
-		exit(-EINVAL);
+		fprintf(stderr, "BAT only supports 1 or 2 channels for now!\n");
+		exit(EXIT_FAILURE);
 	}
 
 }
-void set_bat_struct(struct bat *bat)
+static void set_bat_struct(struct bat *bat)
 {
 	int ret;
 
 	/* Determine capture file */
 	if (bat->local == true)
-		bat->output_file = bat->input_file;
+		bat->capture_file = bat->playback_file;
 	else
-		bat->output_file = TEMP_RECORD_FILE_NAME;
+		bat->capture_file = TEMP_RECORD_FILE_NAME;
 
 	/* Determine tiny device if needed */
 	if (bat->tinyalsa == true) {
@@ -202,7 +211,7 @@ void set_bat_struct(struct bat *bat)
 				&bat->playback_device_tiny);
 	}
 
-	if (bat->input_file == NULL) {
+	if (bat->playback_file == NULL) {
 		/* No input file so we will generate our own sine wave */
 		if (bat->frames) {
 			bat->sinus_duration = bat->rate; /* Nb of frames for 1 second */
@@ -212,14 +221,15 @@ void set_bat_struct(struct bat *bat)
 			bat->sinus_duration = 0;
 		}
 	} else {
-		bat->fp = fopen(bat->input_file, "rb");
+		bat->fp = fopen(bat->playback_file, "rb");
 		if (bat->fp == NULL) {
-			fprintf(stderr, "Cannot access %s: No such file\n", bat->input_file);
-			exit(-1);
+			fprintf(stderr, "Cannot access %s: No such file!\n", bat->playback_file);
+			exit(EXIT_FAILURE);
 		}
 		ret = read_wav_header(bat);
-		if (ret == -1)
-			exit(-1);
+		if (ret == -1) {
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	bat->frame_size = bat->sample_size * bat->channels;
@@ -244,6 +254,8 @@ int main(int argc, char *argv[])
 	}
 
 	ret = analyze_capture(&bat);
+
+	fprintf(stdout, "\nReturn value is %d\n", ret);
 
 	return ret;
 }

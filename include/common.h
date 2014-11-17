@@ -63,8 +63,8 @@ struct bat {
 	unsigned int capture_card_tiny;
 	unsigned int playback_device_tiny;
 	unsigned int capture_device_tiny;
-	char *input_file;
-	char *output_file;
+	char *playback_file;
+	char *capture_file;
 	FILE *fp;
 
 	void *buf; 		/* PCM Buffer */
@@ -86,6 +86,6 @@ struct analyze {
 void close_file(void *);
 void destroy_mem(void *);
 
-int prepare_wav_info(WAVContainer_t *, struct bat *);
+void prepare_wav_info(WAVContainer_t *, struct bat *);
 int read_wav_header(struct bat *);
 int skip_wav_header(struct bat *);

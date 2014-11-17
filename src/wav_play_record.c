@@ -33,8 +33,7 @@ static void close_handle(void *handle)
 	}
 }
 
-
-int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
+static int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 {
 	snd_pcm_format_t format;
 	snd_pcm_hw_params_t *params;
@@ -59,7 +58,7 @@ int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 		format = SND_PCM_FORMAT_S32_LE;
 		break;
 	default:
-		fprintf(stderr, "Not supported format.\n");
+		fprintf(stderr, "Not supported format!\n");
 		goto fail_exit;
 	}
 	snd_pcm_hw_params_set_format(sndpcm->handle, params, format);
@@ -69,7 +68,7 @@ int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 	snd_pcm_hw_params_set_rate_near(sndpcm->handle, params, &bat->rate, 0);
 
 	if (snd_pcm_hw_params_get_buffer_time_max(params, &buffer_time, 0) < 0) {
-		fprintf(stderr, "Error snd_pcm_hw_params_get_buffer_time_max\n");
+		fprintf(stderr, "Error snd_pcm_hw_params_get_buffer_time_max!\n");
 		goto fail_exit;
 	}
 
@@ -83,7 +82,7 @@ int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 
 	/* Write the parameters to the driver */
 	if (snd_pcm_hw_params(sndpcm->handle, params) < 0) {
-		fprintf(stderr, "Unable to set and pcm hw parameters.\n");
+		fprintf(stderr, "Unable to set and pcm hw parameters!\n");
 		goto fail_exit;
 	}
 
@@ -91,7 +90,7 @@ int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 	snd_pcm_hw_params_get_buffer_size(params, &sndpcm->buffer_size);
 	if (sndpcm->period_size == sndpcm->buffer_size) {
 		fprintf(stderr,
-				"Can't use period equal to buffer size (%lu == %lu)\n",
+				"Can't use period equal to buffer size (%lu == %lu)!\n",
 				sndpcm->period_size, sndpcm->buffer_size);
 		goto fail_exit;
 	}
@@ -103,11 +102,12 @@ int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 	sndpcm->period_bytes = sndpcm->period_size * sndpcm->frame_bits / 8;
 	sndpcm->buffer = (char *) malloc(sndpcm->period_bytes);
 	if (sndpcm->buffer == NULL) {
-		fprintf(stderr, "Memory buffer of snd pcm allocated fail.\n");
+		fprintf(stderr, "Memory buffer of snd pcm allocated fail!\n");
 		goto fail_exit;
 	}
 
 	return 0;
+
 fail_exit:
 	return -1;
 }
@@ -126,7 +126,7 @@ static int generate_input_data(struct SNDPCMContainer sndpcm, int count,struct b
 	static int i = 0;
 	int k,l;
 
-	if (bat->input_file != NULL) {
+	if (bat->playback_file != NULL) {
 		/* From input file */
 		load = 0;
 
@@ -140,7 +140,7 @@ static int generate_input_data(struct SNDPCMContainer sndpcm, int count,struct b
 			}
 			if (err < count - load) {
 				if (ferror(bat->fp)) {
-					fprintf(stderr, "Error when reading input file\n");
+					fprintf(stderr, "Error when reading input file!\n");
 					return -1;
 				}
 				load += err;
@@ -209,19 +209,19 @@ void *playback_alsa(void *bat_param)
 	struct bat *bat = (struct bat *) bat_param;
 	int ret;
 
-	fprintf(stdout, "Enter playback thread (ALSA).\n");
+	fprintf(stdout, "Entering playback thread (ALSA).\n");
 
 	memset(&sndpcm, 0, sizeof(sndpcm));
 	if (NULL != bat->playback_device) {
 		err = snd_pcm_open(&sndpcm.handle, bat->playback_device,
 				SND_PCM_STREAM_PLAYBACK, 0);
 		if (err < 0) {
-			fprintf(stderr, "Unable to open pcm device: %s\n",
+			fprintf(stderr, "Unable to open pcm device: %s!\n",
 					snd_strerror(err));
 			goto fail_exit;
 		}
 	} else {
-		fprintf(stderr, "No audio device to open\n");
+		fprintf(stderr, "No audio device to open for playback!\n");
 		goto fail_exit;
 	}
 
@@ -230,11 +230,11 @@ void *playback_alsa(void *bat_param)
 		goto fail_exit;
 	}
 
-	if (bat->input_file == NULL) {
+	if (bat->playback_file == NULL) {
 		fprintf(stdout, "Playing generated audio sine wave");
 		bat->sinus_duration == 0 ? fprintf(stdout," endlessly\n"):fprintf(stdout,"\n");
 	} else {
-		fprintf(stdout, "Playing input audio file: %s\n", bat->input_file);
+		fprintf(stdout, "Playing input audio file: %s\n", bat->playback_file);
 	}
 
 	count = sndpcm.period_bytes;
@@ -253,10 +253,10 @@ void *playback_alsa(void *bat_param)
 			if (err == -EAGAIN || (err >= 0 && err < size)) {
 				snd_pcm_wait(sndpcm.handle, 500);
 			} else if (err == -EPIPE) {
-				fprintf(stderr, "Playback: Underrun occurred\n");
+				fprintf(stderr, "Playback: Underrun occurred!\n");
 				snd_pcm_prepare(sndpcm.handle);
 			} else if (err < 0) {
-				fprintf(stderr, "Write to pcm device fail\n");
+				fprintf(stderr, "Write to pcm device fail!\n");
 				goto fail_exit;
 			}
 
@@ -298,7 +298,7 @@ void *record_alsa(void *bat_param)
 	int size, offset, count, frames;
 	struct bat *bat = (struct bat *) bat_param;
 
-	if (bat->sinus_duration == 0 && bat->input_file==NULL)
+	if (bat->sinus_duration == 0 && bat->playback_file==NULL)
 		return 0;							/* No capture when in mode: play sine wave endlessly */
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
@@ -308,12 +308,12 @@ void *record_alsa(void *bat_param)
 		err = snd_pcm_open(&sndpcm.handle, bat->capture_device,
 				SND_PCM_STREAM_CAPTURE, 0);
 		if (err < 0) {
-			fprintf(stderr, "Unable to open pcm device: %s\n",
+			fprintf(stderr, "Unable to open pcm device: %s!\n",
 					snd_strerror(err));
 			goto fail_exit;
 		}
 	} else {
-		fprintf(stderr, "No audio device to open\n");
+		fprintf(stderr, "No audio device to open for capture!\n");
 		goto fail_exit;
 	}
 
@@ -324,10 +324,10 @@ void *record_alsa(void *bat_param)
 
 	prepare_wav_info(&wav, bat);
 
-	remove(bat->output_file);
-	fp = fopen(bat->output_file, "w+");
+	remove(bat->capture_file);
+	fp = fopen(bat->capture_file, "w+");
 	if (NULL == fp) {
-		fprintf(stderr, "Cannot create file: %s\n", bat->output_file);
+		fprintf(stderr, "Cannot create file: %s!\n", bat->capture_file);
 		goto fail_exit;
 	}
 
@@ -340,7 +340,7 @@ void *record_alsa(void *bat_param)
 	if (fwrite(&wav.header, 1, sizeof(wav.header), fp) != sizeof(wav.header)
 		|| fwrite(&wav.format, 1, sizeof(wav.format), fp) != sizeof(wav.format)
 		|| fwrite(&wav.chunk, 1, sizeof(wav.chunk), fp) != sizeof(wav.chunk)) {
-		fprintf(stderr, "Error write wav file header\n");
+		fprintf(stderr, "Error write wav file header!\n");
 		goto fail_exit;
 	}
 
@@ -358,9 +358,9 @@ void *record_alsa(void *bat_param)
 				snd_pcm_wait(sndpcm.handle, 500);
 			} else if (err == -EPIPE) {
 				snd_pcm_prepare(sndpcm.handle);
-				fprintf(stderr, "Capture: Overrun occurred\n");
+				fprintf(stderr, "Capture: Overrun occurred!\n");
 			} else if (err < 0) {
-				fprintf(stderr, "Read from pcm device fail\n");
+				fprintf(stderr, "Read from pcm device fail!\n");
 				goto fail_exit;
 			}
 
@@ -371,12 +371,14 @@ void *record_alsa(void *bat_param)
 		}
 
 		if (fwrite(sndpcm.buffer, 1, size, fp) != size) {
-			fprintf(stderr, "Write to wav file fail\n");
+			fprintf(stderr, "Write to wav file fail!\n");
 			goto fail_exit;
 		}
 		count -= size;
 	}
 
+	// Normally we will never reach this part of code (before fail_exit) as
+	//  this thread will be cancelled by end of play thread.
 	pthread_cleanup_pop(0);
 	pthread_cleanup_pop(0);
 	pthread_cleanup_pop(0);

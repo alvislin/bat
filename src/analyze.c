@@ -28,7 +28,7 @@
 /*
  * Convert from sample size to double
  */
-static void convert(struct bat *bat, struct analyze *a)
+static int convert(struct bat *bat, struct analyze *a)
 {
 	void *s = a->buf;
 	int i;
@@ -46,9 +46,11 @@ static void convert(struct bat *bat, struct analyze *a)
 			break;
 		default:
 			fprintf(stderr, "Unsupported sample size!\n");
+			return -1;
 			break;
 		}
 	}
+	return 0;
 }
 
 /*
@@ -127,7 +129,6 @@ static int check(struct bat *bat, struct analyze *a)
 		ret = -EIO;
 
 	fprintf(stdout, "Detected at least %d signal(s) in total\n", signals);
-	fprintf(stdout, "\nReturn value is %d\n", ret);
 
 	return ret;
 }
@@ -170,7 +171,9 @@ static int find_and_check_harmonics(struct bat *bat, struct analyze *a)
 		goto out4;
 
 	/* convert source PCM to doubles */
-	convert(bat, a);
+	ret = convert(bat, a);
+	if (ret != 0)
+		goto out4;
 
 	/* run FFT */
 	fftw_execute(p);
@@ -196,7 +199,7 @@ out1:
 /*
  * Convert interleaved samples from channels in samples from a single channel
  */
-int reorder_data(struct bat *bat)
+static int reorder_data(struct bat *bat)
 {
 	char *p, *new_bat_buf;
 	int ch, i, j;
@@ -233,28 +236,32 @@ int analyze_capture(struct bat *bat)
 			bat->rate, bat->channels, bat->sample_size);
 	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n\n", bat->target_freq);
 
-	bat->fp = fopen(bat->output_file, "rb");
+	bat->fp = fopen(bat->capture_file, "rb");
 	if (bat->fp == NULL) {
-		fprintf(stderr, "failed to open %s\n", bat->output_file);
+		fprintf(stderr, "failed to open %s!\n", bat->capture_file);
 		return -ENOENT;
 	}
 
 	bat->buf = malloc(bat->frames * bat->frame_size);
 	if (bat->buf == NULL) {
-		fclose(bat->fp);
 		return -ENOMEM;
 	}
 
 	// Skip header
-	skip_wav_header(bat); /* FIXME check return value */
+	ret = skip_wav_header(bat);
+	if (ret != 0) {
+		return ret;
+	}
 
 	items = fread(bat->buf, bat->frame_size, bat->frames, bat->fp);
 	if (items != bat->frames) {
-		ret = -EIO;
-		goto out;
+		free(bat->buf);
+		return -EIO;
 	}
 
-	reorder_data(bat);
+	ret = reorder_data(bat);
+	if (ret !=0 )
+		return ret;
 
 	for (c = 0; c < bat->channels; c++) {
 		struct analyze a;
@@ -264,7 +271,5 @@ int analyze_capture(struct bat *bat)
 		ret = find_and_check_harmonics(bat, &a);
 	}
 
-	out: fclose(bat->fp);
-	free(bat->buf);
 	return ret;
 }
