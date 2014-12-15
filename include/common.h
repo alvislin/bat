@@ -57,14 +57,20 @@ struct bat {
 
 	int sinus_duration;
 
+	/* TODO: this can be consolidated into a struct for playback + capture */
 	char *playback_device;
 	char *capture_device;
 	unsigned int playback_card_tiny;
 	unsigned int capture_card_tiny;
 	unsigned int playback_device_tiny;
 	unsigned int capture_device_tiny;
+	unsigned int periods_played;
+	unsigned int periods_total;
+	bool period_limit;
 	char *playback_file;
 	char *capture_file;
+	bool playback_single;
+	bool capture_single;
 	FILE *fp;
 
 	void *buf; 		/* PCM Buffer */

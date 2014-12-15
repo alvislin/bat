@@ -31,7 +31,7 @@
 #include "common.h"
 #include "analyze.h"
 
-static void convert_alsa_device_string_to_tiny_card_and_device(char *alsa_device, unsigned int *tiny_card,
+static void get_tiny_format(char *alsa_device, unsigned int *tiny_card,
 		unsigned int *tiny_device)
 {
 	char *tmp1, *tmp2, *tmp3;
@@ -46,60 +46,164 @@ static void convert_alsa_device_string_to_tiny_card_and_device(char *alsa_device
 	*tmp2 = ',';
 
 }
-static void create_play_and_record_thread(struct bat* bat)
+
+static pthread_t thread_start(struct bat *bat, pthread_t *id, int playback)
 {
 	int ret;
+
+	ret = pthread_create(id, NULL,
+		playback ? bat->playback : bat->capture, (void *)bat);
+	if (ret)
+		fprintf(stderr, "error: cant create thread %d\n", ret);
+
+	return ret;
+}
+
+static int thread_wait_completion(struct bat *bat, pthread_t id, int *val)
+{
+	int err;
+
+	err = pthread_join(id, (void**)&val);
+	if (err) {
+		fprintf(stderr, "error: cant join thread %d\n", err);
+		pthread_cancel(id);
+	}
+
+	return err;
+}
+
+/* loopback test where we play sine wave and capture the same sine wave */
+static void test_loopback(struct bat *bat)
+{
 	pthread_t capture_id, playback_id;
-	int *thread_playback_ret;
+	int ret, thread_result = 0;
 
-	ret = pthread_create(&playback_id, NULL, bat->playback, (void *) bat);
-	if (0 != ret) {
-		fprintf(stdout, "Create playback thread error!\n");
-		exit(EXIT_FAILURE);
-	}
-
-	sleep(1); /* Let time for playing something before recording *//* FIXME should be either removed or reduced! */
-
-	ret = pthread_create(&capture_id, NULL, bat->capture, (void *) bat);
-	if (0 != ret) {
-		fprintf(stdout, "Create capture thread error!\n");
-		pthread_cancel(playback_id);
-		exit(EXIT_FAILURE);
-	}
-
-	ret = pthread_join(playback_id, (void**) &thread_playback_ret);
+	/* start playback */
+	ret = thread_start(bat, &playback_id, 1);
 	if (ret != 0) {
-		fprintf(stdout, "Joining playback thread error!\n");
+		fprintf(stderr, "error: failed to create playback thread\n");
+		exit(EXIT_FAILURE);
+	}
+
+	/* TODO: use a pipe to signal stream start etc - i.e. to sync threads */
+	sleep(1); /* Let time for playing something before recording */
+
+	/* start capture */
+	ret = thread_start(bat, &capture_id, 0);
+	if (ret != 0) {
+		fprintf(stderr, "error: failed to create capture thread\n");
 		pthread_cancel(playback_id);
+		exit(EXIT_FAILURE);
+	}
+
+	/* wait for playback to complete */
+	ret = thread_wait_completion(bat, playback_id, &thread_result);
+	if (ret != 0) {
+		fprintf(stderr, "error: cant join playback thread\n");
 		pthread_cancel(capture_id);
 		exit(EXIT_FAILURE);
 	}
-	fprintf(stdout, "Play thread exit.\n");
+
+	/* check playback status */
+	if (thread_result != 0) {
+		fprintf(stderr, "error: playback failed %d\n", thread_result);
+		pthread_cancel(capture_id);
+		exit(EXIT_FAILURE);
+	} else
+		fprintf(stdout, "Playback completed.\n");
+
+	/* now stop and wait for capture to finish */
 	pthread_cancel(capture_id);
-	if (*thread_playback_ret != 0) {
-		fprintf(stderr, "Return value of playback thread is %x!\n", *thread_playback_ret);
-		fprintf(stderr, "Sound play fail!\n");
-		exit(EXIT_FAILURE);
-	}
-	ret = pthread_join(capture_id, NULL);
+	ret = thread_wait_completion(bat, capture_id, &thread_result);
 	if (ret != 0) {
-		fprintf(stdout, "Joining capture thread error!\n");
+		fprintf(stderr, "error: cant join capture thread\n");
 		exit(EXIT_FAILURE);
 	}
-	fprintf(stdout, "Record thread exit.\n");
+
+	/* check capture status */
+	if (thread_result != 0) {
+		fprintf(stderr, "error: capture failed %d\n", thread_result);
+		exit(EXIT_FAILURE);
+	} else
+		fprintf(stdout, "Capture completed.\n");
+}
+
+/* single ended playback only test */
+static void test_playback(struct bat *bat)
+{
+	pthread_t playback_id;
+	int ret, thread_result = 0;
+
+	/* start playback */
+	ret = thread_start(bat, &playback_id, 1);
+	if (ret != 0) {
+		fprintf(stderr, "error: failed to create playback thread\n");
+		exit(EXIT_FAILURE);
+	}
+
+	/* wait for playback to complete */
+	ret = thread_wait_completion(bat, playback_id, &thread_result);
+	if (ret != 0) {
+		fprintf(stderr, "error: cant join playback thread\n");
+		exit(EXIT_FAILURE);
+	}
+
+	/* check playback status */
+	if (thread_result != 0) {
+		fprintf(stderr, "error: playback failed %d\n", thread_result);
+		exit(EXIT_FAILURE);
+	} else
+		fprintf(stdout, "Playback completed.\n");
+
+}
+
+/* single ended capture only test */
+static void test_capture(struct bat *bat)
+{
+	pthread_t capture_id;
+	int ret, thread_result = 0;
+
+	/* start capture */
+	ret = thread_start(bat, &capture_id, 0);
+	if (ret != 0) {
+		fprintf(stderr, "error: failed to create capture thread\n");
+		exit(EXIT_FAILURE);
+	}
+
+	// TODO: stop capture
+
+	/* wait for capture to complete */
+	ret = thread_wait_completion(bat, capture_id, &thread_result);
+	if (ret != 0) {
+		fprintf(stderr, "error: cant join capture thread\n");
+		exit(EXIT_FAILURE);
+	}
+
+	/* check playback status */
+	if (thread_result != 0) {
+		fprintf(stderr, "error: capture failed %d\n", thread_result);
+		exit(EXIT_FAILURE);
+	} else
+		fprintf(stdout, "Capture completed.\n");
+
 }
 
 static void usage(char *argv[])
 {
-	fprintf(stdout, "Usage:%s [-D pcm device] [-P pcm playback device] [-C pcm capture device] [-f input file] "
-			"[-s sample size] [-c number of channels] [-r sampling rate] "
-			"[-n frames to capture] [-k sigma k] [-F Target Freq] "
-			"[-l internal loop, bypass alsa] [-t use tinyalsa instead of alsa]\n", argv[0]);
+	fprintf(stdout,
+	"Usage:%s [-D sound card] [-P playback pcm] [-C capture pcm] [-f input file]\n"
+	"         [-s sample size] [-c number of channels] [-r sampling rate]\n"
+	"         [-n frames to capture] [-k sigma k] [-F Target Freq]\n"
+	"         [-l internal loop, bypass hardware]\n"
+	"         [-t use tinyalsa instead of alsa]\n"
+	"         [-a single ended capture]\n"
+	"         [-b single ended playback]\n"
+	"         [-p total number of perids to play/capture]\n", argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
 	exit(EXIT_FAILURE);
 }
 
-static void create_bat_struct(struct bat *bat)
+static void set_defaults(struct bat *bat)
 {
 	memset(bat, 0, sizeof(struct bat));
 
@@ -118,13 +222,16 @@ static void create_bat_struct(struct bat *bat)
 	bat->playback = &playback_alsa;
 	bat->capture = &record_alsa;
 	bat->tinyalsa = false;
+	bat->playback_single = false;
+	bat->capture_single = false;
+	bat->period_limit = false;
 }
 
 static void parse_arguments(struct bat *bat, int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hf:s:n:c:F:r:D:P:C:k::l::t::")) != -1) {
+	while ((opt = getopt(argc, argv, "hf:s:n:c:F:r:D:P:C:k::l::t::abp:")) != -1) {
 		switch (opt) {
 		case 'D':
 			if (bat->playback_device == NULL) {
@@ -164,13 +271,23 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 		case 'l':
 			bat->local = true;
 			break;
+		case 'a':
+			bat->capture_single = true;
+			break;
+		case 'b':
+			bat->playback_single = true;
+			break;
+		case 'p':
+			bat->periods_total = atoi(optarg);
+			bat->period_limit = true;
+			break;
 		case 't':
 #ifdef HAVE_LIBTINYALSA
 			bat->playback = &playback_tinyalsa;
 			bat->capture = &record_tinyalsa;
 			bat->tinyalsa = true;
 #else
-			fprintf(stdout,"You don't have tinyalsa installed!\n");
+			fprintf(stderr,"error: tinyalsa not installed\n");
 			exit(-EINVAL);
 #endif
 			break;
@@ -181,19 +298,30 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 	}
 }
 
-static void check_bat_struct(struct bat *bat)
+/* validate options */
+static void validate_options(struct bat *bat)
 {
+	/* check we have an input file for local mode */
 	if ((bat->local == true) && (bat->capture_file == NULL)) {
-		fprintf(stderr, "You have to specify an input file for local testing!\n");
-		exit(EXIT_FAILURE);
-	}
-	if (bat->channels > 2 || bat->channels < 1) {
-		fprintf(stderr, "BAT only supports 1 or 2 channels for now!\n");
+		fprintf(stderr, "error: no input file for local testing\n");
 		exit(EXIT_FAILURE);
 	}
 
+	/* check supported channels */
+	if (bat->channels > 2 || bat->channels < 1) {
+		fprintf(stderr, "error: %d channels not supported\n",
+			bat->channels);
+		exit(EXIT_FAILURE);
+	}
+
+	/* check single ended is in either playback or capture - not both */
+	if (bat->playback_single && bat->capture_single) {
+		fprintf(stderr, "error: single ended mode is simplex\n");
+		exit(EXIT_FAILURE);
+	}
 }
-static void set_bat_struct(struct bat *bat)
+
+static void bat_init(struct bat *bat)
 {
 	int ret;
 
@@ -205,9 +333,9 @@ static void set_bat_struct(struct bat *bat)
 
 	/* Determine tiny device if needed */
 	if (bat->tinyalsa == true) {
-		convert_alsa_device_string_to_tiny_card_and_device(bat->capture_device, &bat->capture_card_tiny,
+		get_tiny_format(bat->capture_device, &bat->capture_card_tiny,
 				&bat->capture_device_tiny);
-		convert_alsa_device_string_to_tiny_card_and_device(bat->playback_device, &bat->playback_card_tiny,
+		get_tiny_format(bat->playback_device, &bat->playback_card_tiny,
 				&bat->playback_device_tiny);
 	}
 
@@ -223,7 +351,8 @@ static void set_bat_struct(struct bat *bat)
 	} else {
 		bat->fp = fopen(bat->playback_file, "rb");
 		if (bat->fp == NULL) {
-			fprintf(stderr, "Cannot access %s: No such file!\n", bat->playback_file);
+			fprintf(stderr, "error: cant open %s %d\n",
+				bat->playback_file, -errno);
 			exit(EXIT_FAILURE);
 		}
 		ret = read_wav_header(bat);
@@ -233,29 +362,39 @@ static void set_bat_struct(struct bat *bat)
 	}
 
 	bat->frame_size = bat->sample_size * bat->channels;
-
 }
 
 int main(int argc, char *argv[])
 {
 	struct bat bat;
-	int ret;
+	int ret = 0;
 
-	create_bat_struct(&bat);
+	set_defaults(&bat);
 
 	parse_arguments(&bat, argc, argv);
 
-	set_bat_struct(&bat);
+	validate_options(&bat);
 
-	check_bat_struct(&bat);
+	bat_init(&bat);
 
-	if (bat.local == false) {
-		create_play_and_record_thread(&bat);
+	if (bat.playback_single) {
+		test_playback(&bat);
+		goto out;
 	}
 
+	if (bat.capture_single) {
+		test_capture(&bat);
+		goto analyze;
+	}
+
+	if (bat.local == false) {
+		test_loopback(&bat);
+	}
+
+
+analyze:
 	ret = analyze_capture(&bat);
-
+out:
 	fprintf(stdout, "\nReturn value is %d\n", ret);
-
 	return ret;
 }

@@ -42,10 +42,14 @@ static int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 
 	/* Allocate a hardware parameters object. */
 	snd_pcm_hw_params_alloca(&params);
+
 	/* Fill it in with default values. */
 	snd_pcm_hw_params_any(sndpcm->handle, params);
+
 	/* Set access mode */
-	snd_pcm_hw_params_set_access(sndpcm->handle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+	snd_pcm_hw_params_set_access(sndpcm->handle, params,
+		SND_PCM_ACCESS_RW_INTERLEAVED);
+
 	/* Set format */
 	switch (bat->sample_size) {
 	case 1:
@@ -62,8 +66,10 @@ static int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 		goto fail_exit;
 	}
 	snd_pcm_hw_params_set_format(sndpcm->handle, params, format);
+
 	/* Set channels */
 	snd_pcm_hw_params_set_channels(sndpcm->handle, params, bat->channels);
+
 	/* Set sampling rate */
 	snd_pcm_hw_params_set_rate_near(sndpcm->handle, params, &bat->rate, 0);
 
@@ -89,8 +95,8 @@ static int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 	snd_pcm_hw_params_get_period_size(params, &sndpcm->period_size, 0);
 	snd_pcm_hw_params_get_buffer_size(params, &sndpcm->buffer_size);
 	if (sndpcm->period_size == sndpcm->buffer_size) {
-		fprintf(stderr, "Can't use period equal to buffer size (%lu == %lu)!\n", sndpcm->period_size,
-				sndpcm->buffer_size);
+		fprintf(stderr, "Can't use period equal to buffer size (%lu == %lu)!\n",
+			sndpcm->period_size, sndpcm->buffer_size);
 		goto fail_exit;
 	}
 
@@ -121,8 +127,8 @@ fail_exit:
 static int generate_input_data(struct SNDPCMContainer sndpcm, int count, struct bat *bat)
 {
 	int err;
-	static int load = 0;
-	static int i = 0;
+	int load = 0;
+	int i = 0;
 	int k, l;
 
 	if (bat->playback_file != NULL) {
@@ -195,6 +201,8 @@ static int generate_input_data(struct SNDPCMContainer sndpcm, int count, struct 
 		}
 		load += (count * 8 / sndpcm.frame_bits);
 	}
+
+	bat->periods_played++; 
 	return 0;
 }
 /**
@@ -212,9 +220,11 @@ void *playback_alsa(void *bat_param)
 
 	memset(&sndpcm, 0, sizeof(sndpcm));
 	if (NULL != bat->playback_device) {
-		err = snd_pcm_open(&sndpcm.handle, bat->playback_device, SND_PCM_STREAM_PLAYBACK, 0);
+		err = snd_pcm_open(&sndpcm.handle, bat->playback_device, 
+			SND_PCM_STREAM_PLAYBACK, 0);
 		if (err < 0) {
-			fprintf(stderr, "Unable to open pcm device: %s!\n", snd_strerror(err));
+			fprintf(stderr, "Unable to open pcm device: %s!\n",
+				snd_strerror(err));
 			goto fail_exit;
 		}
 	} else {
@@ -243,6 +253,9 @@ void *playback_alsa(void *bat_param)
 		if (ret < 0)
 			goto fail_exit;
 		else if (ret > 0)
+			break;
+
+		if (bat->period_limit && bat->periods_played >= bat->periods_total)
 			break;
 
 		while (size > 0) {
@@ -299,12 +312,16 @@ void *record_alsa(void *bat_param)
 		return 0; /* No capture when in mode: play sine wave endlessly */
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+
 	fprintf(stdout, "Enter capture thread (ALSA).\n");
 	memset(&sndpcm, 0, sizeof(sndpcm));
+
 	if (NULL != bat->capture_device) {
-		err = snd_pcm_open(&sndpcm.handle, bat->capture_device, SND_PCM_STREAM_CAPTURE, 0);
+		err = snd_pcm_open(&sndpcm.handle, bat->capture_device, 
+			SND_PCM_STREAM_CAPTURE, 0);
 		if (err < 0) {
-			fprintf(stderr, "Unable to open pcm device: %s!\n", snd_strerror(err));
+			fprintf(stderr, "Unable to open pcm device: %s!\n",
+				snd_strerror(err));
 			goto fail_exit;
 		}
 	} else {
@@ -370,6 +387,10 @@ void *record_alsa(void *bat_param)
 			goto fail_exit;
 		}
 		count -= size;
+		bat->periods_played++;
+
+		if (bat->period_limit && bat->periods_played >= bat->periods_total)
+			break;
 	}
 
 	// Normally we will never reach this part of code (before fail_exit) as
