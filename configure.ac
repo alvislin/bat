@@ -80,6 +80,7 @@ fi
 AC_CONFIG_FILES([
 Makefile
 src/Makefile
+m4/Makefile
 ])
 
 AC_OUTPUT
