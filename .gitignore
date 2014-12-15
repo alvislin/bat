@@ -20,7 +20,7 @@ aclocal.m4
 COPYING
 INSTALL
 depcomp
-m4/*
+m4/*.m4
 missing
 stamp-h1
 install-sh
