@@ -56,7 +56,7 @@ static int convert(struct bat *bat, struct analyze *a)
 /*
  * Search for main frequencies in fft results and compare it to target
  */
-static int check(struct bat *bat, struct analyze *a)
+static int check(struct bat *bat, struct analyze *a, int channel)
 {
 	float Hz = 1.0 / ((float) bat->frames / (float) bat->rate);
 	float mean = 0.0, t, sigma = 0.0, p = 0.0;
@@ -108,10 +108,10 @@ static int check(struct bat *bat, struct analyze *a)
 						(end + 1) * Hz);
 				if ((peak + 1) * Hz > 1.99 && (peak + 1) * Hz < 7.01) {
 					fprintf(stdout, "Warning: there is too low peak %2.2f Hz, very close to DC\n", (peak + 1) * Hz);
-				} else if ((peak + 1) * Hz < bat->target_freq - 1.0) {
+				} else if ((peak + 1) * Hz < bat->target_freq[channel] - 1.0) {
 					fprintf(stdout, " FAIL: Peak freq too low %2.2f Hz\n", (peak + 1) * Hz);
 					ret = -EIO;
-				} else if ((peak + 1) * Hz > bat->target_freq + 1.0) {
+				} else if ((peak + 1) * Hz > bat->target_freq[channel] + 1.0) {
 					fprintf(stdout, " FAIL: Peak freq too high %2.2f Hz\n", (peak + 1) * Hz);
 					ret = -EIO;
 				} else {
@@ -147,7 +147,7 @@ static void calc_magnitude(struct bat *bat, struct analyze *a, int N)
 	a->mag[0] = 0.0;
 }
 
-static int find_and_check_harmonics(struct bat *bat, struct analyze *a)
+static int find_and_check_harmonics(struct bat *bat, struct analyze *a, int channel)
 {
 	fftw_plan p;
 	int ret = -ENOMEM, N = bat->frames;
@@ -182,7 +182,7 @@ static int find_and_check_harmonics(struct bat *bat, struct analyze *a)
 	calc_magnitude(bat, a, N);
 
 	/* check data */
-	ret = check(bat, a);
+	ret = check(bat, a, channel);
 
 	fftw_destroy_plan(p);
 
@@ -234,7 +234,6 @@ int analyze_capture(struct bat *bat)
 
 	fprintf(stdout, "\nBAT analysed signal is %d frames at %d Hz, %d channels, %d bytes per sample\n\n", bat->frames,
 			bat->rate, bat->channels, bat->sample_size);
-	fprintf(stdout, "BAT Checking for target frequency %2.2f Hz\n\n", bat->target_freq);
 
 	bat->fp = fopen(bat->capture_file, "rb");
 	if (bat->fp == NULL) {
@@ -266,9 +265,9 @@ int analyze_capture(struct bat *bat)
 	for (c = 0; c < bat->channels; c++) {
 		struct analyze a;
 
-		printf("Channel: %i\n", c + 1);
+		printf("Channel: %i -- Checking for target frequency %2.2f Hz\n", c + 1,bat->target_freq[c]);
 		a.buf = bat->buf + (c * bat->frames * bat->frame_size / bat->channels);
-		ret = find_and_check_harmonics(bat, &a);
+		ret = find_and_check_harmonics(bat, &a, c);
 	}
 
 	return ret;

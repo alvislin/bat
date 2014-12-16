@@ -110,7 +110,7 @@ If option -f is given, then parameter from arguments c, r, n and s are read from
  these informations will be missing.
 
 Device name are specified in the ALSA format (even for tinyalsa)
-hwplug:x,y	or hw:x,y
+plughw:x,y	or hw:x,y
 Where x is card number and y is device number
 You can get the list of cards and devices by typing the command:
  aplay -l

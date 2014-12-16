@@ -99,9 +99,7 @@ static int check_param(struct pcm_params *params, unsigned int param, unsigned i
 static int generate_input_data(char *buffer, int size, struct bat *bat)
 {
 	static int load = 0;
-	static int i = 0;
 	int num_read;
-	int k, l;
 
 	if (bat->playback_file != NULL) {
 		num_read = fread(buffer, 1, size, bat->fp);
@@ -115,41 +113,23 @@ static int generate_input_data(char *buffer, int size, struct bat *bat)
 		switch (bat->sample_size) {
 		case 1:
 			buf = (int8_t *) buffer;
-			max = INT8_MAX;
+			max = INT8_MAX-1;				// Due to float conversion later on we need to get some margin in order to avoid sign inversion
 			break;
 		case 2:
 			buf = (int16_t *) buffer;
-			max = INT16_MAX;
+			max = INT16_MAX-10;				// Due to float conversion later on we need to get some margin in order to avoid sign inversion
 			break;
 		case 4:
 			buf = (int32_t *) buffer;
-			max = INT32_MAX;
+			max = INT32_MAX-100;			// Due to float conversion later on we need to get some margin in order to avoid sign inversion
 			break;
 		default:
 			fprintf(stderr, "Format not supported!\n");
 			return -1;
 		}
 
-		float sin_val = (float) bat->target_freq / (float) bat->rate;
-		for (k = 0; k < size / bat->channels / bat->sample_size; k++) {
-			float sinus_f = sin(i++ * 2.0 * M_PI * sin_val) * max;
-			if (i == bat->rate)
-				i = 0;
-			for (l = 0; l < bat->channels; l++) {
-				switch (bat->sample_size) {
-				case 1:
-					*((int8_t *) buf) = (int8_t) (sinus_f);
-					break;
-				case 2:
-					*((int16_t *) buf) = (int16_t) (sinus_f);
-					break;
-				case 4:
-					*((int32_t *) buf) = (int32_t) (sinus_f);
-					break;
-				}
-				buf += bat->sample_size;
-			}
-		}
+		generate_sine_wave(bat, size / bat->channels / bat->sample_size, buf, max);
+
 		load += (size / bat->channels / bat->sample_size);
 		num_read = size;
 	}
@@ -266,7 +246,7 @@ void *playback_tinyalsa(void *bat_param)
 	struct bat *bat = (struct bat *) bat_param;
 	retval_play = 0;
 
-	fprintf(stdout, "Enter playback thread (tinyalsa).\n");
+	fprintf(stdout, "Entering playback thread (tinyalsa).\n");
 
 	if (bat->playback_file == NULL) {
 		fprintf(stdout, "Playing generated audio sine wave");
@@ -371,7 +351,7 @@ void *record_tinyalsa(void *bat_param)
 	}
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-	fprintf(stdout, "Enter capture thread (tinyalsa).\n");
+	fprintf(stdout, "Entering capture thread (tinyalsa).\n");
 
 	remove(bat->capture_file);
 	file = fopen(bat->capture_file, "wb");

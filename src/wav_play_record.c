@@ -10,6 +10,8 @@
 #include "common.h"
 #include "wav_play_record.h"
 
+/*#define DEBUG*/
+
 struct SNDPCMContainer {
 	snd_pcm_t *handle;
 	snd_pcm_uframes_t period_size;
@@ -127,9 +129,7 @@ fail_exit:
 static int generate_input_data(struct SNDPCMContainer sndpcm, int count, struct bat *bat)
 {
 	int err;
-	int load = 0;
-	int i = 0;
-	int k, l;
+	static int load = 0;
 
 	if (bat->playback_file != NULL) {
 		/* From input file */
@@ -164,41 +164,23 @@ static int generate_input_data(struct SNDPCMContainer sndpcm, int count, struct 
 		switch (bat->sample_size) {
 		case 1:
 			buf = (int8_t *) sndpcm.buffer;
-			max = INT8_MAX;
+			max = INT8_MAX-1;				// Due to float conversion later on we need to get some margin in order to avoid sign inversion
 			break;
 		case 2:
 			buf = (int16_t *) sndpcm.buffer;
-			max = INT16_MAX;
+			max = INT16_MAX-10;				// Due to float conversion later on we need to get some margin in order to avoid sign inversion
 			break;
 		case 4:
 			buf = (int32_t *) sndpcm.buffer;
-			max = INT32_MAX;
+			max = INT32_MAX-100;			// Due to float conversion later on we need to get some margin in order to avoid sign inversion
 			break;
 		default:
 			fprintf(stderr, "Format not supported!\n");
 			return -1;
 		}
 
-		float sin_val = (float) bat->target_freq / (float) bat->rate;
-		for (k = 0; k < count * 8 / sndpcm.frame_bits; k++) {
-			float sinus_f = sin(i++ * 2.0 * M_PI * sin_val) * max;
-			if (i == bat->rate)
-				i = 0;
-			for (l = 0; l < bat->channels; l++) {
-				switch (bat->sample_size) {
-				case 1:
-					*((int8_t *) buf) = (int8_t) (sinus_f);
-					break;
-				case 2:
-					*((int16_t *) buf) = (int16_t) (sinus_f);
-					break;
-				case 4:
-					*((int32_t *) buf) = (int32_t) (sinus_f);
-					break;
-				}
-				buf += bat->sample_size;
-			}
-		}
+		generate_sine_wave(bat, count * 8 / sndpcm.frame_bits, buf, max);
+
 		load += (count * 8 / sndpcm.frame_bits);
 	}
 
@@ -245,6 +227,10 @@ void *playback_alsa(void *bat_param)
 	}
 
 	count = sndpcm.period_bytes;
+#ifdef DEBUG
+	FILE *sin_file;
+	sin_file = fopen("/tmp/sin.wav","wb");
+#endif
 	while (1) {
 		offset = 0;
 		size = count * 8 / sndpcm.frame_bits;
@@ -254,7 +240,9 @@ void *playback_alsa(void *bat_param)
 			goto fail_exit;
 		else if (ret > 0)
 			break;
-
+#ifdef DEBUG
+		fwrite(sndpcm.buffer,count * 8 / sndpcm.frame_bits,4,sin_file);
+#endif
 		if (bat->period_limit && bat->periods_played >= bat->periods_total)
 			break;
 
@@ -276,7 +264,9 @@ void *playback_alsa(void *bat_param)
 			}
 		}
 	}
-
+#ifdef DEBUG
+	fclose(sin_file);
+#endif
 	snd_pcm_drain(sndpcm.handle);
 	if (bat->fp)
 		fclose(bat->fp);
@@ -313,7 +303,7 @@ void *record_alsa(void *bat_param)
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
-	fprintf(stdout, "Enter capture thread (ALSA).\n");
+	fprintf(stdout, "Entering capture thread (ALSA).\n");
 	memset(&sndpcm, 0, sizeof(sndpcm));
 
 	if (NULL != bat->capture_device) {

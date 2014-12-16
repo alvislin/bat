@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <math.h>
+
 
 #include "wav_play_record.h"
 #include "common.h"
@@ -169,5 +171,37 @@ void prepare_wav_info(WAVContainer_t *wav, struct bat *bat)
 	wav->chunk.length = 10 * wav->format.bytes_p_second; /* FIXME could be set to number of frames ? given in cmd line */
 	wav->chunk.type = WAV_DATA;
 	wav->header.length = (wav->chunk.length) + sizeof(wav->chunk) + sizeof(wav->format) + sizeof(wav->header) - 8;
+
+}
+
+void generate_sine_wave(struct bat *bat,int length, void *buf, int max)
+{
+	static int i = 0;
+	int k, c;
+	float sin_val[MAX_NUMBER_OF_CHANNELS];
+
+	for (c=0;c<bat->channels;c++)
+		sin_val[c] = (float) bat->target_freq[c] / (float) bat->rate;
+	for (k = 0; k < length; k++) {
+		for (c = 0; c < bat->channels; c++) {
+			float sinus_f = sin(i * 2.0 * M_PI * sin_val[c]) * max;
+			switch (bat->sample_size) {
+			case 1:
+				*((int8_t *) buf) = (int8_t) (sinus_f);
+				break;
+			case 2:
+				*((int16_t *) buf) = (int16_t) (sinus_f);
+				break;
+			case 4:
+				*((int32_t *) buf) = (int32_t) (sinus_f);
+				break;
+			}
+			buf += bat->sample_size;
+		}
+		i += 1;
+		if (i == bat->rate)
+			i = 0;
+
+	}
 
 }

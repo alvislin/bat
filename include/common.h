@@ -8,6 +8,8 @@
 #define WAV_FMT         COMPOSE('f','m','t',' ')
 #define WAV_DATA        COMPOSE('d','a','t','a')
 
+#define MAX_NUMBER_OF_CHANNELS		2
+
 typedef struct wavHeader {
 	unsigned int magic; /* 'RIFF' */
 	unsigned int length; /* file len */
@@ -53,7 +55,7 @@ struct bat {
 	int sample_size;
 
 	float sigma_k;
-	float target_freq;
+	float target_freq[MAX_NUMBER_OF_CHANNELS];
 
 	int sinus_duration;
 
@@ -95,3 +97,5 @@ void destroy_mem(void *);
 void prepare_wav_info(WAVContainer_t *, struct bat *);
 int read_wav_header(struct bat *);
 int skip_wav_header(struct bat *);
+void generate_sine_wave(struct bat *,int , void *, int );
+

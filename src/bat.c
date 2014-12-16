@@ -31,6 +31,18 @@
 #include "common.h"
 #include "analyze.h"
 
+static void extract_target_frequencies_from_command_line(struct bat *bat, char *freq)
+{
+	char *tmp1;
+	tmp1 = strchr(freq,',');
+	if (tmp1 == NULL) {
+		bat->target_freq[1] = bat->target_freq[0] = atof(optarg);
+	} else {
+		*tmp1 = '\0';
+		bat->target_freq[0] = atof(optarg);
+		bat->target_freq[1] = atof(tmp1+1);
+	}
+}
 static void get_tiny_format(char *alsa_device, unsigned int *tiny_card,
 		unsigned int *tiny_device)
 {
@@ -213,7 +225,8 @@ static void set_defaults(struct bat *bat)
 	bat->frame_size = 2;
 	bat->sample_size = 2;
 	bat->frames = bat->rate * 2;
-	bat->target_freq = 997.0;
+	bat->target_freq[0] = 997.0;
+	bat->target_freq[1] = 997.0;
 	bat->sigma_k = 3.0;
 	bat->playback_device = NULL;
 	bat->capture_device = NULL;
@@ -254,7 +267,7 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 			bat->frames = atoi(optarg);
 			break;
 		case 'F':
-			bat->target_freq = atof(optarg);
+			extract_target_frequencies_from_command_line(bat,optarg);
 			break;
 		case 'c':
 			bat->channels = atoi(optarg);

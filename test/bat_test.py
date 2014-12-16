@@ -58,11 +58,11 @@ def generate_wav_file(ch,ss,r,f,sf):
     values = []     
          
     for i in xrange(f*2):
-        sin_val = float(sine * sf)
-        sin_val = sin_val / float(r)
-        val = gain*amplitude*math.sin(sin_val*2*math.pi)
-        packed_val = struct.pack(formatting,int(val))           
         for c in xrange(ch):
+            sin_val = float(sine * sf[c])
+            sin_val = sin_val / float(r)
+            val = gain*amplitude*math.sin(sin_val*2*math.pi)
+            packed_val = struct.pack(formatting,int(val))           
             values.append(packed_val)
         sine += 1
     
@@ -80,7 +80,10 @@ def generate_command(ch,ss,r,f,sf,fi,extra):
     channel[1] = str(ch)
     sample[1] = str(ss)
     length[1] = str(f)
-    sine_freq[1] = str(sf)
+    if (len(sf) == 1):
+        sine_freq[1] = str(sf[0])
+    else:
+        sine_freq[1] = str(sf[0])+","+str(sf[1])
     device[1] = args.device;
     
     command = []
@@ -113,7 +116,7 @@ def test_sine_gen(testset,extra=[]):
         for s in testset['sample size']:
             for r in testset['frequency']:
                 f = 2*r
-                sf = random.randint(1,2*r/5)
+                sf = [random.randint(1,2*r/5) for x in xrange(ch)]
                 print '-'*80
                 print 'Test #{}: {} channel(s), {} bytes per sample, sampling rate is {}Hz, sine wave frequency is {}Hz, length is {}s'.format(test_nb,ch,s,r,sf,f/r)
                 command = generate_command(ch,s,r,f,sf,None,extra)
@@ -145,7 +148,7 @@ def test_input_file(testset,extra=[]):
         for s in testset['sample size']:
             for r in testset['frequency']:
                 f = 2*r
-                sf = random.randint(1,2*r/5)
+                sf = [random.randint(1,2*r/5) for x in xrange(ch)]
                 print '-'*80
                 print 'Test #{}: {} channel(s), {} bytes per sample, sampling rate is {}Hz, sine wave frequency is {}Hz, length is {}s'.format(test_nb,ch,s,r,sf,f/r)
                 print '  Generating wav file: {} channel(s), {} bytes per sample, sampling rate is {}Hz, sine wave frequency is {}Hz, length is {}s'.format(ch,s,r,sf,f*2/r)
@@ -184,7 +187,7 @@ if __name__ == '__main__':
     ret = test_input_file(testset_alsa,['-l'])
     if (ret != 0):
         sys.exit()
-       
+         
     print '#'*80
     print '#'*10, 'TESTING BAT AUDIO LOOP -- ALSA', '#'*10
     ret = test_input_file(testset_alsa)
