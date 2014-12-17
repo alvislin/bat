@@ -11,50 +11,51 @@
 #include <stdbool.h>
 #include <math.h>
 
-
 #include "wav_play_record.h"
 #include "common.h"
 
-int retval_play = 0;
-int retval_record = 0;
+int retval_play;
+int retval_record;
 
 void close_file(void *file)
 {
 	FILE *fp = file;
-	if (NULL != fp) {
+	if (NULL != fp)
 		fclose(fp);
-	}
 }
 
 void destroy_mem(void *block)
 {
-	if (NULL != block) {
+	if (NULL != block)
 		free(block);
-	}
 }
 
 int skip_wav_header(struct bat *bat)
 {
-	wavHeader_t riff_wave_header;
-	wavChunkHeader_t chunk_header;
-	chunkFmt_t chunk_fmt;
+	struct wav_header riff_wave_header;
+	struct wav_chunk_header chunk_header;
+	struct chunk_fmt chunk_fmt;
 	int more_chunks = 1;
 	size_t ret;
 
 	ret = fread(&riff_wave_header, sizeof(riff_wave_header), 1, bat->fp);
 	if (ret != 1) {
-		fprintf(stderr, "Error reading header of file %s!\n", bat->capture_file);
+		fprintf(stderr, "Error reading header of file %s!\n",
+				bat->capture_file);
 		return -1;
 	}
-	if ((riff_wave_header.magic != WAV_RIFF) || (riff_wave_header.type != WAV_WAVE)) {
-		fprintf(stderr, "Error: '%s' is not a riff/wave file!\n", bat->capture_file);
+	if ((riff_wave_header.magic != WAV_RIFF)
+			|| (riff_wave_header.type != WAV_WAVE)) {
+		fprintf(stderr, "Error: '%s' is not a riff/wave file!\n",
+				bat->capture_file);
 		return -1;
 	}
 
 	do {
 		ret = fread(&chunk_header, sizeof(chunk_header), 1, bat->fp);
 		if (ret != 1) {
-			fprintf(stderr, "Error reading chunk of file %s!\n", bat->capture_file);
+			fprintf(stderr, "Error reading chunk of file %s!\n",
+					bat->capture_file);
 			return -1;
 		}
 
@@ -62,14 +63,21 @@ int skip_wav_header(struct bat *bat)
 		case WAV_FMT:
 			ret = fread(&chunk_fmt, sizeof(chunk_fmt), 1, bat->fp);
 			if (ret != 1) {
-				fprintf(stderr, "Error reading chunk fmt of file %s!\n", bat->capture_file);
+				fprintf(stderr,
+					"Error reading chunk fmt of file %s!\n"
+					, bat->capture_file);
 				return -1;
 			}
 			/* If the format header is larger, skip the rest */
 			if (chunk_header.length > sizeof(chunk_fmt)) {
-				ret = fseek(bat->fp, chunk_header.length - sizeof(chunk_fmt), SEEK_CUR);
+				ret = fseek(bat->fp,
+					chunk_header.length - sizeof(chunk_fmt),
+					SEEK_CUR);
 				if (ret == -1) {
-					fprintf(stderr, "Error skipping chunk fmt of file %s!\n", bat->capture_file);
+					fprintf(stderr,
+						"Error skipping chunk fmt "
+						"of file %s!\n",
+						bat->capture_file);
 					return -1;
 				}
 			}
@@ -82,7 +90,9 @@ int skip_wav_header(struct bat *bat)
 			/* Unknown chunk, skip bytes */
 			ret = fseek(bat->fp, chunk_header.length, SEEK_CUR);
 			if (ret == -1) {
-				fprintf(stderr, "Error skipping unknown chunk of file %s!\n", bat->capture_file);
+				fprintf(stderr,
+					"Error skipping unknown chunk of file %s!\n",
+					bat->capture_file);
 				return -1;
 			}
 		}
@@ -93,26 +103,30 @@ int skip_wav_header(struct bat *bat)
 
 int read_wav_header(struct bat *bat)
 {
-	wavHeader_t riff_wave_header;
-	wavChunkHeader_t chunk_header;
-	chunkFmt_t chunk_fmt;
+	struct wav_header riff_wave_header;
+	struct wav_chunk_header chunk_header;
+	struct chunk_fmt chunk_fmt;
 	int more_chunks = 1;
 	size_t ret;
 
 	ret = fread(&riff_wave_header, sizeof(riff_wave_header), 1, bat->fp);
 	if (ret != 1) {
-		fprintf(stderr, "Error reading header of file %s!\n", bat->playback_file);
+		fprintf(stderr, "Error reading header of file %s!\n",
+				bat->playback_file);
 		return -1;
 	}
-	if ((riff_wave_header.magic != WAV_RIFF) || (riff_wave_header.type != WAV_WAVE)) {
-		fprintf(stderr, "Error: '%s' is not a riff/wave file!\n", bat->playback_file);
+	if ((riff_wave_header.magic != WAV_RIFF)
+			|| (riff_wave_header.type != WAV_WAVE)) {
+		fprintf(stderr, "Error: '%s' is not a riff/wave file!\n",
+				bat->playback_file);
 		return -1;
 	}
 
 	do {
 		ret = fread(&chunk_header, sizeof(chunk_header), 1, bat->fp);
 		if (ret != 1) {
-			fprintf(stderr, "Error reading chunk of file %s!\n", bat->playback_file);
+			fprintf(stderr, "Error reading chunk of file %s!\n",
+					bat->playback_file);
 			return -1;
 		}
 
@@ -120,14 +134,20 @@ int read_wav_header(struct bat *bat)
 		case WAV_FMT:
 			ret = fread(&chunk_fmt, sizeof(chunk_fmt), 1, bat->fp);
 			if (ret != 1) {
-				fprintf(stderr, "Error reading chunk fmt of file %s!\n", bat->playback_file);
+				fprintf(stderr,
+					"Error reading chunk fmt of file %s!\n",
+					bat->playback_file);
 				return -1;
 			}
 			/* If the format header is larger, skip the rest */
 			if (chunk_header.length > sizeof(chunk_fmt)) {
-				ret = fseek(bat->fp, chunk_header.length - sizeof(chunk_fmt), SEEK_CUR);
+				ret = fseek(bat->fp,
+					chunk_header.length - sizeof(chunk_fmt)
+					, SEEK_CUR);
 				if (ret == -1) {
-					fprintf(stderr, "Error skipping chunk fmt of file %s!\n", bat->playback_file);
+					fprintf(stderr,
+						"Error skipping chunk fmt of file %s!\n",
+						bat->playback_file);
 					return -1;
 				}
 			}
@@ -138,7 +158,10 @@ int read_wav_header(struct bat *bat)
 
 			break;
 		case WAV_DATA:
-			bat->frames = chunk_header.length / bat->frame_size / 2; /* FIXME The number of analysed captured frames is arbitrarily set to half of the number of frames */
+			/* FIXME The number of analysed captured frames is
+			 * arbitrarily set to half of the number of frames */
+			bat->frames = chunk_header.length / bat->frame_size
+				/ 2;
 			/* Stop looking for chunks */
 			more_chunks = 0;
 			break;
@@ -146,7 +169,9 @@ int read_wav_header(struct bat *bat)
 			/* Unknown chunk, skip bytes */
 			ret = fseek(bat->fp, chunk_header.length, SEEK_CUR);
 			if (ret == -1) {
-				fprintf(stderr, "Error skipping unknown chunk of file %s!\n", bat->playback_file);
+				fprintf(stderr,
+					"Error skipping unknown chunk of file %s!\n",
+					bat->playback_file);
 				return -1;
 			}
 		}
@@ -155,7 +180,7 @@ int read_wav_header(struct bat *bat)
 	return 0;
 }
 
-void prepare_wav_info(WAVContainer_t *wav, struct bat *bat)
+void prepare_wav_info(struct wav_container *wav, struct bat *bat)
 {
 	wav->header.magic = WAV_RIFF;
 	wav->header.type = WAV_WAVE;
@@ -168,19 +193,20 @@ void prepare_wav_info(WAVContainer_t *wav, struct bat *bat)
 	wav->format.blocks_align = bat->channels * bat->sample_size;
 	wav->format.bytes_p_second = wav->format.blocks_align * bat->rate;
 	/* Default set time length to 10 seconds */
-	wav->chunk.length = 10 * wav->format.bytes_p_second; /* FIXME could be set to number of frames ? given in cmd line */
+	wav->chunk.length = bat->frames * bat->frame_size;
 	wav->chunk.type = WAV_DATA;
-	wav->header.length = (wav->chunk.length) + sizeof(wav->chunk) + sizeof(wav->format) + sizeof(wav->header) - 8;
+	wav->header.length = (wav->chunk.length) + sizeof(wav->chunk)
+			+ sizeof(wav->format) + sizeof(wav->header) - 8;
 
 }
 
-void generate_sine_wave(struct bat *bat,int length, void *buf, int max)
+void generate_sine_wave(struct bat *bat, int length, void *buf, int max)
 {
-	static int i = 0;
+	static int i;
 	int k, c;
 	float sin_val[MAX_NUMBER_OF_CHANNELS];
 
-	for (c=0;c<bat->channels;c++)
+	for (c = 0; c < bat->channels; c++)
 		sin_val[c] = (float) bat->target_freq[c] / (float) bat->rate;
 	for (k = 0; k < length; k++) {
 		for (c = 0; c < bat->channels; c++) {

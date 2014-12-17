@@ -12,7 +12,7 @@
 
 /*#define DEBUG*/
 
-struct SNDPCMContainer {
+struct snd_pcm_container {
 	snd_pcm_t *handle;
 	snd_pcm_uframes_t period_size;
 	snd_pcm_uframes_t buffer_size;
@@ -30,12 +30,11 @@ struct SNDPCMContainer {
 static void close_handle(void *handle)
 {
 	snd_pcm_t *hd = handle;
-	if (NULL != hd) {
+	if (NULL != hd)
 		snd_pcm_close(hd);
-	}
 }
 
-static int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
+static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 {
 	snd_pcm_format_t format;
 	snd_pcm_hw_params_t *params;
@@ -75,18 +74,22 @@ static int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 	/* Set sampling rate */
 	snd_pcm_hw_params_set_rate_near(sndpcm->handle, params, &bat->rate, 0);
 
-	if (snd_pcm_hw_params_get_buffer_time_max(params, &buffer_time, 0) < 0) {
-		fprintf(stderr, "Error snd_pcm_hw_params_get_buffer_time_max!\n");
+	if (snd_pcm_hw_params_get_buffer_time_max(params, &buffer_time,
+			0) < 0) {
+		fprintf(stderr, "Error ...get_buffer_time_max()!\n");
 		goto fail_exit;
 	}
 
 	if (buffer_time > 500000)
 		buffer_time = 500000;
-	period_time = buffer_time / 8; /* Was 4, changed to 8 to remove reduce capture overrun */
+	/* Was 4, changed to 8 to remove reduce capture overrun */
+	period_time = buffer_time / 8;
 
 	/* Set buffer time and period time */
-	snd_pcm_hw_params_set_buffer_time_near(sndpcm->handle, params, &buffer_time, 0);
-	snd_pcm_hw_params_set_period_time_near(sndpcm->handle, params, &period_time, 0);
+	snd_pcm_hw_params_set_buffer_time_near(sndpcm->handle, params,
+			&buffer_time, 0);
+	snd_pcm_hw_params_set_period_time_near(sndpcm->handle, params,
+			&period_time, 0);
 
 	/* Write the parameters to the driver */
 	if (snd_pcm_hw_params(sndpcm->handle, params) < 0) {
@@ -97,7 +100,8 @@ static int setSNDPCMParams(struct bat *bat, struct SNDPCMContainer *sndpcm)
 	snd_pcm_hw_params_get_period_size(params, &sndpcm->period_size, 0);
 	snd_pcm_hw_params_get_buffer_size(params, &sndpcm->buffer_size);
 	if (sndpcm->period_size == sndpcm->buffer_size) {
-		fprintf(stderr, "Can't use period equal to buffer size (%lu == %lu)!\n",
+		fprintf(stderr,
+			"Can't use period equal to buffer size (%lu = %lu)!\n",
 			sndpcm->period_size, sndpcm->buffer_size);
 		goto fail_exit;
 	}
@@ -126,26 +130,30 @@ fail_exit:
  * 0 ok
  * >0 break
  */
-static int generate_input_data(struct SNDPCMContainer sndpcm, int count, struct bat *bat)
+static int generate_input_data(struct snd_pcm_container sndpcm, int count,
+		struct bat *bat)
 {
 	int err;
-	static int load = 0;
+	static int load;
 
 	if (bat->playback_file != NULL) {
 		/* From input file */
 		load = 0;
 
 		while (1) {
-			err = fread(sndpcm.buffer + load, 1, count - load, bat->fp);
+			err = fread(sndpcm.buffer + load, 1, count - load,
+					bat->fp);
 			if (0 == err) {
 				if (feof(bat->fp)) {
-					fprintf(stdout, "End of playing.\n");
+					fprintf(stdout,
+						"End of playing.\n");
 					return 1;
 				}
 			}
 			if (err < count - load) {
 				if (ferror(bat->fp)) {
-					fprintf(stderr, "Error when reading input file!\n");
+					fprintf(stderr,
+						"Error reading input file!\n");
 					return -1;
 				}
 				load += err;
@@ -160,40 +168,67 @@ static int generate_input_data(struct SNDPCMContainer sndpcm, int count, struct 
 
 		void *buf;
 		int max;
-
+		/* Due to float conversion later on we need to get some margin
+		 * on max value in order to avoid sign inversion */
 		switch (bat->sample_size) {
 		case 1:
 			buf = (int8_t *) sndpcm.buffer;
-			max = INT8_MAX-1;				// Due to float conversion later on we need to get some margin in order to avoid sign inversion
+			max = INT8_MAX-1;
 			break;
 		case 2:
 			buf = (int16_t *) sndpcm.buffer;
-			max = INT16_MAX-10;				// Due to float conversion later on we need to get some margin in order to avoid sign inversion
+			max = INT16_MAX-10;
 			break;
 		case 4:
 			buf = (int32_t *) sndpcm.buffer;
-			max = INT32_MAX-100;			// Due to float conversion later on we need to get some margin in order to avoid sign inversion
+			max = INT32_MAX-100;
 			break;
 		default:
 			fprintf(stderr, "Format not supported!\n");
 			return -1;
 		}
 
-		generate_sine_wave(bat, count * 8 / sndpcm.frame_bits, buf, max);
+		generate_sine_wave(bat, count * 8 / sndpcm.frame_bits, buf,
+				max);
 
 		load += (count * 8 / sndpcm.frame_bits);
 	}
 
-	bat->periods_played++; 
+	bat->periods_played++;
 	return 0;
 }
+
+static int write_to_pcm(int size, int err,
+		const struct snd_pcm_container *sndpcm, int offset)
+{
+	while (size > 0) {
+		err = snd_pcm_writei(sndpcm->handle, sndpcm->buffer + offset,
+				size);
+		if (err == -EAGAIN || (err >= 0 && err < size)) {
+			snd_pcm_wait(sndpcm->handle, 500);
+		} else if (err == -EPIPE) {
+			fprintf(stderr, "Playback: Underrun occurred!\n");
+			snd_pcm_prepare(sndpcm->handle);
+		} else if (err < 0) {
+			fprintf(stderr, "Write to pcm device fail!\n");
+			return -1;
+		}
+
+		if (err > 0) {
+			size -= err;
+			offset += err * sndpcm->frame_bits / 8;
+		}
+	}
+	return 0;
+}
+
 /**
  * Play
  */
 void *playback_alsa(void *bat_param)
 {
 	int err = 0;
-	struct SNDPCMContainer sndpcm;
+	struct snd_pcm_container sndpcm;
 	int size, offset, count;
 	struct bat *bat = (struct bat *) bat_param;
 	int ret;
@@ -202,7 +237,7 @@ void *playback_alsa(void *bat_param)
 
 	memset(&sndpcm, 0, sizeof(sndpcm));
 	if (NULL != bat->playback_device) {
-		err = snd_pcm_open(&sndpcm.handle, bat->playback_device, 
+		err = snd_pcm_open(&sndpcm.handle, bat->playback_device,
 			SND_PCM_STREAM_PLAYBACK, 0);
 		if (err < 0) {
 			fprintf(stderr, "Unable to open pcm device: %s!\n",
@@ -214,22 +249,23 @@ void *playback_alsa(void *bat_param)
 		goto fail_exit;
 	}
 
-	err = setSNDPCMParams(bat, &sndpcm);
-	if (err != 0) {
+	err = set_snd_pcm_params(bat, &sndpcm);
+	if (err != 0)
 		goto fail_exit;
-	}
 
 	if (bat->playback_file == NULL) {
 		fprintf(stdout, "Playing generated audio sine wave");
-		bat->sinus_duration == 0 ? fprintf(stdout, " endlessly\n") : fprintf(stdout, "\n");
+		bat->sinus_duration == 0 ?
+			fprintf(stdout, " endlessly\n") : fprintf(stdout, "\n");
 	} else {
-		fprintf(stdout, "Playing input audio file: %s\n", bat->playback_file);
+		fprintf(stdout, "Playing input audio file: %s\n",
+				bat->playback_file);
 	}
 
 	count = sndpcm.period_bytes;
 #ifdef DEBUG
 	FILE *sin_file;
-	sin_file = fopen("/tmp/sin.wav","wb");
+	sin_file = fopen("/tmp/sin.wav", "wb");
 #endif
 	while (1) {
 		offset = 0;
@@ -241,28 +277,16 @@ void *playback_alsa(void *bat_param)
 		else if (ret > 0)
 			break;
 #ifdef DEBUG
-		fwrite(sndpcm.buffer,count * 8 / sndpcm.frame_bits,4,sin_file);
+		fwrite(sndpcm.buffer, count * 8 / sndpcm.frame_bits, 4,
+			sin_file);
 #endif
-		if (bat->period_limit && bat->periods_played >= bat->periods_total)
+		if (bat->period_limit &&
+				bat->periods_played >= bat->periods_total)
 			break;
 
-		while (size > 0) {
-			err = snd_pcm_writei(sndpcm.handle, sndpcm.buffer + offset, size);
-			if (err == -EAGAIN || (err >= 0 && err < size)) {
-				snd_pcm_wait(sndpcm.handle, 500);
-			} else if (err == -EPIPE) {
-				fprintf(stderr, "Playback: Underrun occurred!\n");
-				snd_pcm_prepare(sndpcm.handle);
-			} else if (err < 0) {
-				fprintf(stderr, "Write to pcm device fail!\n");
-				goto fail_exit;
-			}
-
-			if (err > 0) {
-				size -= err;
-				offset += err * sndpcm.frame_bits / 8;
-			}
-		}
+		ret = write_to_pcm(size, err, &sndpcm, offset);
+		if (ret == -1)
+			goto fail_exit;
 	}
 #ifdef DEBUG
 	fclose(sin_file);
@@ -293,13 +317,13 @@ void *record_alsa(void *bat_param)
 {
 	int err = 0;
 	FILE *fp = NULL;
-	struct SNDPCMContainer sndpcm;
-	WAVContainer_t wav;
+	struct snd_pcm_container sndpcm;
+	struct wav_container wav;
 	int size, offset, count, frames;
 	struct bat *bat = (struct bat *) bat_param;
 
 	if (bat->sinus_duration == 0 && bat->playback_file == NULL)
-		return 0; /* No capture when in mode: play sine wave endlessly */
+		return 0; /* No capture when playing sine wave endlessly */
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
@@ -307,7 +331,7 @@ void *record_alsa(void *bat_param)
 	memset(&sndpcm, 0, sizeof(sndpcm));
 
 	if (NULL != bat->capture_device) {
-		err = snd_pcm_open(&sndpcm.handle, bat->capture_device, 
+		err = snd_pcm_open(&sndpcm.handle, bat->capture_device,
 			SND_PCM_STREAM_CAPTURE, 0);
 		if (err < 0) {
 			fprintf(stderr, "Unable to open pcm device: %s!\n",
@@ -319,10 +343,9 @@ void *record_alsa(void *bat_param)
 		goto fail_exit;
 	}
 
-	err = setSNDPCMParams(bat, &sndpcm);
-	if (err != 0) {
+	err = set_snd_pcm_params(bat, &sndpcm);
+	if (err != 0)
 		goto fail_exit;
-	}
 
 	prepare_wav_info(&wav, bat);
 
@@ -339,9 +362,18 @@ void *record_alsa(void *bat_param)
 	pthread_cleanup_push(destroy_mem, sndpcm.buffer);
 	pthread_cleanup_push(close_file, fp);
 
-	if (fwrite(&wav.header, 1, sizeof(wav.header), fp) != sizeof(wav.header)
-		|| fwrite(&wav.format, 1, sizeof(wav.format), fp) != sizeof(wav.format)
-		|| fwrite(&wav.chunk, 1, sizeof(wav.chunk), fp) != sizeof(wav.chunk)) {
+	if (fwrite(&wav.header, 1,
+			sizeof(wav.header), fp) != sizeof(wav.header)) {
+		fprintf(stderr, "Error write wav file header!\n");
+		goto fail_exit;
+	}
+	if (fwrite(&wav.format, 1,
+			sizeof(wav.format), fp) != sizeof(wav.format)) {
+		fprintf(stderr, "Error write wav file header!\n");
+		goto fail_exit;
+	}
+	if (fwrite(&wav.chunk, 1,
+			sizeof(wav.chunk), fp) != sizeof(wav.chunk)) {
 		fprintf(stderr, "Error write wav file header!\n");
 		goto fail_exit;
 	}
@@ -379,12 +411,13 @@ void *record_alsa(void *bat_param)
 		count -= size;
 		bat->periods_played++;
 
-		if (bat->period_limit && bat->periods_played >= bat->periods_total)
+		if (bat->period_limit &&
+			bat->periods_played >= bat->periods_total)
 			break;
 	}
 
-	// Normally we will never reach this part of code (before fail_exit) as
-	//  this thread will be cancelled by end of play thread.
+	/* Normally we will never reach this part of code (before fail_exit) as
+	   this thread will be cancelled by end of play thread. */
 	pthread_cleanup_pop(0);
 	pthread_cleanup_pop(0);
 	pthread_cleanup_pop(0);

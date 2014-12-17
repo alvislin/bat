@@ -6,6 +6,8 @@ import struct
 import os
 import argparse
 import sys
+import threading
+import time
 
 #Commands example
 # bat -D plughw:0,0 -f file.wav -F 250 [-l] [-t]
@@ -104,6 +106,20 @@ def generate_command(ch,ss,r,f,sf,fi,extra):
     
     return command
 
+def launch_bat(command,verbose):
+    FNULL = open(os.devnull, 'w')
+    try:
+        if (verbose == False):
+            subprocess.check_call(command, stdout=FNULL)
+        else:
+            print '.'*40
+            subprocess.check_call(command)
+            print '.'*40
+    except:
+        print ' ==> Fail'
+        os._exit(1)
+        
+
 def test_sine_gen(testset,extra=[]):
     """
     This function calls BAT for all channels (1,2), for all sample size (1,2 & 4),
@@ -121,21 +137,36 @@ def test_sine_gen(testset,extra=[]):
                 print 'Test #{}: {} channel(s), {} bytes per sample, sampling rate is {}Hz, sine wave frequency is {}Hz, length is {}s'.format(test_nb,ch,s,r,sf,f/r)
                 command = generate_command(ch,s,r,f,sf,None,extra)
                 test_nb += 1
-                print '  Calling bat with cmd:',command
-                if (args.verbose == False):
-                    ret = subprocess.call(command, stdout=FNULL)
-                else:
-                    print '.'*40
-                    ret = subprocess.call(command)
-                    print '.'*40
-                if (ret == 0):
-                    print ' ==> Pass'
-                else:
-                    print ' ==> Failed'
-                    return ret
-    
+                print '  Calling bat with cmd:'," ".join(command)
+                launch_bat(command,args.verbose)
+                print ' ==> Pass'    
     return 0
 
+def test_single_line_mode(testset,extra=[]):
+    global test_nb
+    
+    for ch in testset['channel']:
+        for s in testset['sample size']:
+            for r in testset['frequency']:
+                f = r
+                sf = [random.randint(1,2*r/5) for x in xrange(ch)]
+                print '-'*80
+                print 'Test #{}: {} channel(s), {} bytes per sample, sampling rate is {}Hz, sine wave frequency is {}Hz, playback length is {}s, capture length is {}s'.format(test_nb,ch,s,r,sf,2*f/r,f/r)
+                command_p = generate_command(ch,s,r,2*f,sf,None,extra+['-b'])
+                command_c = generate_command(ch,s,r,f,sf,None,extra+['-a'])
+                test_nb += 1
+                print '  Calling twice bat with cmd:\n'," ".join(command_p),"\n"," ".join(command_c)
+                single_playback = threading.Thread(None,launch_bat,"single_playback",(command_p, args.verbose))
+                single_capture = threading.Thread(None,launch_bat,"single_capture",(command_c, args.verbose))
+                single_playback.start()
+                time.sleep(0.1)
+                single_capture.start()
+                single_playback.join()
+                single_capture.join()
+                print ' ==> Pass'
+    return 0
+
+    
 def test_input_file(testset,extra=[]):
     """
     This function calls BAT for all channels (1,2), for all sample size (1,2 & 4),
@@ -150,23 +181,14 @@ def test_input_file(testset,extra=[]):
                 f = 2*r
                 sf = [random.randint(1,2*r/5) for x in xrange(ch)]
                 print '-'*80
-                print 'Test #{}: {} channel(s), {} bytes per sample, sampling rate is {}Hz, sine wave frequency is {}Hz, length is {}s'.format(test_nb,ch,s,r,sf,f/r)
+                print 'Test #{}: {} channel(s), {} bytes per sample, sampling rate is {}Hz, sine wave frequency is {}Hz, analysing length is {}s'.format(test_nb,ch,s,r,sf,f/r)
                 print '  Generating wav file: {} channel(s), {} bytes per sample, sampling rate is {}Hz, sine wave frequency is {}Hz, length is {}s'.format(ch,s,r,sf,f*2/r)
                 generate_wav_file(ch,s,r,f,sf)
                 command = generate_command(None,None,None,None,sf,wav_file,extra)
                 test_nb += 1
-                print '  Calling bat with cmd:',command
-                if (args.verbose == False):
-                    ret = subprocess.call(command, stdout=FNULL)
-                else:
-                    print '.'*40
-                    ret = subprocess.call(command)
-                    print '.'*40
-                if (ret == 0):
-                    print ' ==> Pass'
-                else:
-                    print ' ==> Failed'
-                    return ret
+                print '  Calling bat with cmd:'," ".join(command)
+                launch_bat(command,args.verbose)
+                print ' ==> Pass'
     return 0
 
 def parse_command_line():
@@ -178,39 +200,60 @@ def parse_command_line():
     print args,args.device, args.verbose
     
     
+# List of tests    
+def test_file_analysis_alsa():
+    print '#'*80
+    print '#'*10, 'TESTING BAT ANALYZIS -- ALSA', '#'*10
+    test_input_file(testset_alsa,['-l'])
+        
+def test_file_loopback_alsa():
+    print '#'*80
+    print '#'*10, 'TESTING BAT AUDIO LOOP -- ALSA', '#'*10
+    test_input_file(testset_alsa)
     
+def test_sine_loopback_alsa():
+    print '#'*80
+    print '#'*10, 'TESTING BAT AUDIO SINE GEN -- ALSA', '#'*10
+    test_sine_gen(testset_alsa)
+
+def test_file_loopback_tinyalsa():
+    print '#'*80
+    print '#'*10, 'TESTING BAT AUDIO LOOP -- TINYALSA', '#'*10
+    test_input_file(testset_tinyalsa,['-t'])    
+
+def test_sine_loopback_tinyalsa():
+    print '#'*80
+    print '#'*10, 'TESTING BAT AUDIO SINE GEN -- TINYALSA', '#'*10
+    test_sine_gen(testset_tinyalsa,['-t'])
+
+def test_single_line_mode_alsa():
+    print '#'*80
+    print '#'*10, 'TESTING SINGLE LINE MODE -- ALSA', '#'*10
+    test_single_line_mode(testset_alsa)
+
+def test_single_line_mode_tinyalsa():
+    print '#'*80
+    print '#'*10, 'TESTING SINGLE LINE MODE -- TINYALSA', '#'*10
+    test_single_line_mode(testset_tinyalsa,['-t'])
+    pass
+
+# MAIN    
 if __name__ == '__main__':
     parse_command_line()
     
-    print '#'*80
-    print '#'*10, 'TESTING BAT ANALYZIS -- ALSA', '#'*10
-    ret = test_input_file(testset_alsa,['-l'])
-    if (ret != 0):
-        sys.exit()
-         
-    print '#'*80
-    print '#'*10, 'TESTING BAT AUDIO LOOP -- ALSA', '#'*10
-    ret = test_input_file(testset_alsa)
-    if (ret != 0):
-        sys.exit()
+    test_file_analysis_alsa()
+           
+    test_file_loopback_alsa()
       
-    print '#'*80
-    print '#'*10, 'TESTING BAT AUDIO SINE GEN -- ALSA', '#'*10
-    ret = test_sine_gen(testset_alsa)
-    if (ret != 0):
-        sys.exit()
-     
-    print '#'*80
-    print '#'*10, 'TESTING BAT AUDIO LOOP -- TINYALSA', '#'*10
-    ret = test_input_file(testset_tinyalsa,['-t'])
-    if (ret != 0):
-        sys.exit()
-     
-    print '#'*80
-    print '#'*10, 'TESTING BAT AUDIO SINE GEN -- TINYALSA', '#'*10
-    ret = test_sine_gen(testset_tinyalsa,['-t'])
-    if (ret != 0):
-        sys.exit()
+    test_sine_loopback_alsa();  
+       
+    test_file_loopback_tinyalsa()
+       
+    test_sine_loopback_tinyalsa()
+        
+    test_single_line_mode_alsa()
+    
+    test_single_line_mode_tinyalsa()
     
 #     print '#'*80
 #     print '#'*10, 'wrong dectection', '#'*10

@@ -80,12 +80,13 @@ Option -c is used to specify the number of channels (1 or 2)
 Option -s is used to specify the number of bytes per sample (1,2 or 4)
 
 Option -n is used to specify the number of frames to be analyzed (if set to 0,
- then no analyzis is done and it plays endlessly)
+ then no analyzis is done and it plays endlessly). In single line mode (-a or 
+ -b), it is used to specify how many samples to play or capture.
 
 Option -a and -b are used to set single ended mode.
   i.e. only playback or capture.
 
-option -p used to limit the number of periods played or captured.
+option -p used to limit the number of periods played or captured. Use -n instead.
 
 Optional switches:
 ------------------

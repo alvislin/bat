@@ -11,7 +11,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. 
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
  */
 
@@ -31,16 +31,16 @@
 #include "common.h"
 #include "analyze.h"
 
-static void extract_target_frequencies_from_command_line(struct bat *bat, char *freq)
+static void get_sine_frequencies(struct bat *bat, char *freq)
 {
 	char *tmp1;
-	tmp1 = strchr(freq,',');
+	tmp1 = strchr(freq, ',');
 	if (tmp1 == NULL) {
 		bat->target_freq[1] = bat->target_freq[0] = atof(optarg);
 	} else {
 		*tmp1 = '\0';
 		bat->target_freq[0] = atof(optarg);
-		bat->target_freq[1] = atof(tmp1+1);
+		bat->target_freq[1] = atof(tmp1 + 1);
 	}
 }
 static void get_tiny_format(char *alsa_device, unsigned int *tiny_card,
@@ -63,8 +63,8 @@ static pthread_t thread_start(struct bat *bat, pthread_t *id, int playback)
 {
 	int ret;
 
-	ret = pthread_create(id, NULL,
-		playback ? bat->playback : bat->capture, (void *)bat);
+	ret = pthread_create(id, NULL, playback ? bat->playback : bat->capture,
+			(void *) bat);
 	if (ret)
 		fprintf(stderr, "error: cant create thread %d\n", ret);
 
@@ -75,7 +75,7 @@ static int thread_wait_completion(struct bat *bat, pthread_t id, int *val)
 {
 	int err;
 
-	err = pthread_join(id, (void**)&val);
+	err = pthread_join(id, (void **) &val);
 	if (err) {
 		fprintf(stderr, "error: cant join thread %d\n", err);
 		pthread_cancel(id);
@@ -182,7 +182,7 @@ static void test_capture(struct bat *bat)
 		exit(EXIT_FAILURE);
 	}
 
-	// TODO: stop capture
+	/* TODO: stop capture */
 
 	/* wait for capture to complete */
 	ret = thread_wait_completion(bat, capture_id, &thread_result);
@@ -203,14 +203,15 @@ static void test_capture(struct bat *bat)
 static void usage(char *argv[])
 {
 	fprintf(stdout,
-	"Usage:%s [-D sound card] [-P playback pcm] [-C capture pcm] [-f input file]\n"
-	"         [-s sample size] [-c number of channels] [-r sampling rate]\n"
-	"         [-n frames to capture] [-k sigma k] [-F Target Freq]\n"
-	"         [-l internal loop, bypass hardware]\n"
-	"         [-t use tinyalsa instead of alsa]\n"
-	"         [-a single ended capture]\n"
-	"         [-b single ended playback]\n"
-	"         [-p total number of perids to play/capture]\n", argv[0]);
+		"Usage:%s [-D sound card] [-P playback pcm] [-C capture pcm] [-f input file]\n"
+		"         [-s sample size] [-c number of channels] [-r sampling rate]\n"
+		"         [-n frames to capture] [-k sigma k] [-F Target Freq]\n"
+		"         [-l internal loop, bypass hardware]\n"
+		"         [-t use tinyalsa instead of alsa]\n"
+		"         [-a single ended capture]\n"
+		"         [-b single ended playback]\n"
+		"         [-p total number of periods to play/capture]\n",
+		argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
 	exit(EXIT_FAILURE);
 }
@@ -244,15 +245,14 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hf:s:n:c:F:r:D:P:C:k::l::t::abp:")) != -1) {
+	while ((opt = getopt(argc, argv, "hf:s:n:c:F:r:D:P:C:k::l::t::abp:"))
+			!= -1) {
 		switch (opt) {
 		case 'D':
-			if (bat->playback_device == NULL) {
+			if (bat->playback_device == NULL)
 				bat->playback_device = optarg;
-			}
-			if (bat->capture_device == NULL) {
+			if (bat->capture_device == NULL)
 				bat->capture_device = optarg;
-			}
 			break;
 		case 'P':
 			bat->playback_device = optarg;
@@ -267,7 +267,7 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 			bat->frames = atoi(optarg);
 			break;
 		case 'F':
-			extract_target_frequencies_from_command_line(bat,optarg);
+			get_sine_frequencies(bat, optarg);
 			break;
 		case 'c':
 			bat->channels = atoi(optarg);
@@ -300,7 +300,7 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 			bat->capture = &record_tinyalsa;
 			bat->tinyalsa = true;
 #else
-			fprintf(stderr,"error: tinyalsa not installed\n");
+			fprintf(stderr, "error: tinyalsa not installed\n");
 			exit(-EINVAL);
 #endif
 			break;
@@ -355,10 +355,18 @@ static void bat_init(struct bat *bat)
 	if (bat->playback_file == NULL) {
 		/* No input file so we will generate our own sine wave */
 		if (bat->frames) {
-			bat->sinus_duration = bat->rate; /* Nb of frames for 1 second */
-			bat->sinus_duration += 2 * bat->frames; /* Play long enough to capture frame_size frames */
+			if (bat->playback_single) {
+				/* Play nb of frames given by -n argument */
+				bat->sinus_duration = bat->frames;
+			} else {
+				/* Play 1 sec + twice the nb of frames
+				 * to be analysed */
+				bat->sinus_duration = bat->rate;
+				bat->sinus_duration += 2 * bat->frames;
+			}
 		} else {
-			/* Special case where we want to generate a sine wave endlessly without capturing */
+			/* Special case where we want to generate a sine wave
+			 * endlessly without capturing */
 			bat->sinus_duration = 0;
 		}
 	} else {
@@ -369,9 +377,8 @@ static void bat_init(struct bat *bat)
 			exit(EXIT_FAILURE);
 		}
 		ret = read_wav_header(bat);
-		if (ret == -1) {
+		if (ret == -1)
 			exit(EXIT_FAILURE);
-		}
 	}
 
 	bat->frame_size = bat->sample_size * bat->channels;
@@ -386,9 +393,9 @@ int main(int argc, char *argv[])
 
 	parse_arguments(&bat, argc, argv);
 
-	validate_options(&bat);
-
 	bat_init(&bat);
+
+	validate_options(&bat);
 
 	if (bat.playback_single) {
 		test_playback(&bat);
@@ -400,10 +407,8 @@ int main(int argc, char *argv[])
 		goto analyze;
 	}
 
-	if (bat.local == false) {
+	if (bat.local == false)
 		test_loopback(&bat);
-	}
-
 
 analyze:
 	ret = analyze_capture(&bat);
