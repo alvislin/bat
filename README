@@ -57,28 +57,22 @@ BAT should be used as this :
     bat -P plughw:0,3 -C plughw:0,0 -f file.wav -F 1000 [-l] [-t]
     
 2- Loopback with a auto generated sine wawe as input
-    bat -D plughw:0,0 -r 44100 -c 2 -s 2 -n 88200 -F 250 [-l]
+    bat -D plughw:0,0 -r 44100 -c 2 -s 2 -n 88200 -F 250,500 [-l]
     bat -P plughw:0,3 -C plughw:0,0 -r 16000 -c 2 -s 2 -n 16000 -F 250 [-l]
     
 3- Play endlessly a sinus wave at 44100Hz on one channel with 16bits per sample.
 	bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 0  
 
+Common switches:
+------------------
 Option -D, -P, -C are used to specific respectively the audio device for 
  playback and capture, the audio device for playback and the audio device 
  for capture
 
-Option -f is used to specify the input file (which should contain a sine 
- wave of frequency given by -F argument)
-
-Option -F is used to specify the sine wave frequency of the input data
-For auto generated sine wave:
-
-Option -r is used to specify the sampling rate
-
-Option -c is used to specify the number of channels (1 or 2)
-
-Option -s is used to specify the number of bytes per sample (1,2 or 4)
-
+Option -F is used to specify the sine wave frequency of the input data.
+ The sine wav frequency can be different for each channels. 
+ Usage is -F 980,670 when using 2 channels
+ 
 Option -n is used to specify the number of frames to be analyzed (if set to 0,
  then no analyzis is done and it plays endlessly). In single line mode (-a or 
  -b), it is used to specify how many samples to play or capture.
@@ -88,6 +82,19 @@ Option -a and -b are used to set single ended mode.
 
 option -p used to limit the number of periods played or captured. Use -n instead.
 
+For using a wav file as input:
+------------------
+Option -f is used to specify the input file (which should contain a sine 
+ wave of frequency given by -F argument)
+ 
+For auto generated sine wave:
+------------------
+Option -r is used to specify the sampling rate
+
+Option -c is used to specify the number of channels (1 or 2)
+
+Option -s is used to specify the number of bytes per sample (1,2 or 4)
+
 Optional switches:
 ------------------
 Option -l is optional and used to test the analyzis part of BAT. The audio path
@@ -95,6 +102,7 @@ Option -l is optional and used to test the analyzis part of BAT. The audio path
 
 Option -t is optional and enable used of tinyalsa library instead of alsa
  library. See requirements.
+
 
 You need to connect playback to capture through an audio jack cable. 
 BAT will capture the playback of the input file and do a FFT to determine

@@ -32,9 +32,16 @@ wav_file = ['-f',wav_test_file]
 # Index of test
 test_nb = 0;
 
+# Set to true if we expect BAT to fail, false otherwise
+expected_fail = False
+
 # Test set for alsa
 testset_alsa = {'channel':(1,2), 'sample size':(1,2,4), 'frequency':(8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 192000)}
 testset_tinyalsa = {'channel':(2,), 'sample size':(2,4), 'frequency':(44100, 192000)}
+testset_hw = {'channel':(2,), 'sample size':(2,4), 'frequency':(44100, 48000, 96000, 192000)}
+testset_hw_fail1 = {'channel':(1,), 'sample size':(2,4), 'frequency':(44100, 48000, 96000, 192000)}
+testset_hw_fail2 = {'channel':(2,), 'sample size':(1,), 'frequency':(44100, 48000, 96000, 192000)}
+testset_hw_fail3 = {'channel':(2,), 'sample size':(2,4), 'frequency':(8000, 22050)}
 
 def generate_wav_file(ch,ss,r,f,sf):
     """
@@ -116,9 +123,13 @@ def launch_bat(command,verbose):
             subprocess.check_call(command)
             print '.'*40
     except:
-        print ' ==> Fail'
-        os._exit(1)
-        
+        if (expected_fail != True):
+            print ' ==> Fail'
+            os._exit(1)    
+    else:
+        if (expected_fail == True):
+            print ' ==> Fail'
+            os._exit(1)    
 
 def test_sine_gen(testset,extra=[]):
     """
@@ -142,7 +153,7 @@ def test_sine_gen(testset,extra=[]):
                 print ' ==> Pass'    
     return 0
 
-def test_single_line_mode(testset,extra=[]):
+def test_single_line(testset,extra=[]):
     global test_nb
     
     for ch in testset['channel']:
@@ -196,79 +207,58 @@ def parse_command_line():
     parser = argparse.ArgumentParser(description='Call BAT with various command line arguments to test BAT.')
     parser.add_argument('-v','--verbose',help='To get the output of BAT',action='store_true')
     parser.add_argument('-d','--device', help = 'Specify the play and capture device',default='plughw:0,0')
-    args = parser.parse_args()
-    print args,args.device, args.verbose
-    
+    args = parser.parse_args()    
     
 # List of tests    
-def test_file_analysis_alsa():
+def test_file_analysis(testset, name):
     print '#'*80
-    print '#'*10, 'TESTING BAT ANALYZIS -- ALSA', '#'*10
+    print '#'*10, 'TESTING BAT ANALYZIS -- ', name, '#'*10
     test_input_file(testset_alsa,['-l'])
         
-def test_file_loopback_alsa():
+def test_file_loopback(testset,name,extra=[]):
     print '#'*80
-    print '#'*10, 'TESTING BAT AUDIO LOOP -- ALSA', '#'*10
-    test_input_file(testset_alsa)
+    print '#'*10, 'TESTING BAT AUDIO LOOP -- ', name, '#'*10
+    test_input_file(testset,extra)
     
-def test_sine_loopback_alsa():
+def test_sine_loopback(testset,name,extra=[]):
     print '#'*80
-    print '#'*10, 'TESTING BAT AUDIO SINE GEN -- ALSA', '#'*10
-    test_sine_gen(testset_alsa)
+    print '#'*10, 'TESTING BAT AUDIO SINE GEN -- ', name, '#'*10
+    test_sine_gen(testset,extra)  
 
-def test_file_loopback_tinyalsa():
+def test_single_line_mode(testset,name,extra=[]):
     print '#'*80
-    print '#'*10, 'TESTING BAT AUDIO LOOP -- TINYALSA', '#'*10
-    test_input_file(testset_tinyalsa,['-t'])    
-
-def test_sine_loopback_tinyalsa():
-    print '#'*80
-    print '#'*10, 'TESTING BAT AUDIO SINE GEN -- TINYALSA', '#'*10
-    test_sine_gen(testset_tinyalsa,['-t'])
-
-def test_single_line_mode_alsa():
-    print '#'*80
-    print '#'*10, 'TESTING SINGLE LINE MODE -- ALSA', '#'*10
-    test_single_line_mode(testset_alsa)
-
-def test_single_line_mode_tinyalsa():
-    print '#'*80
-    print '#'*10, 'TESTING SINGLE LINE MODE -- TINYALSA', '#'*10
-    test_single_line_mode(testset_tinyalsa,['-t'])
-    pass
+    print '#'*10, 'TESTING SINGLE LINE MODE -- ', name, '#'*10
+    test_single_line(testset,extra)
 
 # MAIN    
 if __name__ == '__main__':
     parse_command_line()
     
-    test_file_analysis_alsa()
-           
-    test_file_loopback_alsa()
-      
-    test_sine_loopback_alsa();  
-       
-    test_file_loopback_tinyalsa()
-       
-    test_sine_loopback_tinyalsa()
+    # Testing plughw by default
+#     test_file_analysis(testset_alsa,"with ALSA testset")
+#             
+#     test_file_loopback(testset_alsa,"ALSA")
+#     test_sine_loopback(testset_alsa,"ALSA");  
+#         
+#     test_file_loopback(testset_tinyalsa,"TYNIALSA",['-t'])
+#     test_sine_loopback(testset_tinyalsa,"TYNIALSA",['-t'])
+         
+    test_single_line_mode(testset_alsa,"ALSA")
+    test_single_line_mode(testset_tinyalsa,"TYNIALSA",['-t'])
         
-    test_single_line_mode_alsa()
+    # Testing hw device
+    plug_device = args.device
+    args.device = args.device.replace("plug","")
     
-    test_single_line_mode_tinyalsa()
-    
-#     print '#'*80
-#     print '#'*10, 'wrong dectection', '#'*10
+    if (plug_device == args.device):
+        sys.exit();
+        
+    test_file_loopback(testset_hw,"ALSA hw")
 
-#     print '#'*80
-#     print '#'*10, 'parameters', '#'*10
-
-#     print '#'*80
-#     print '#'*10, 'Continuous sinus', '#'*10
-
-
+    # Let's test some expected fails        
+    expected_fail = True
+    test_file_loopback(testset_hw_fail1,"ALSA hw with not suppored config")
+    test_sine_loopback(testset_hw_fail2,"ALSA hw with not suppored config")
+    test_file_loopback(testset_hw_fail3,"ALSA hw with not suppored config")
+        
     print '\nTESTS FINISHED'
-   
-    
-    
-
-
-

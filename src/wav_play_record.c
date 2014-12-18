@@ -40,16 +40,30 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 	snd_pcm_hw_params_t *params;
 	unsigned int buffer_time = 0;
 	unsigned int period_time = 0;
+	unsigned int rate;
+	int err;
+	const char *device_name = snd_pcm_name(sndpcm->handle);
 
 	/* Allocate a hardware parameters object. */
 	snd_pcm_hw_params_alloca(&params);
 
 	/* Fill it in with default values. */
-	snd_pcm_hw_params_any(sndpcm->handle, params);
+	err = snd_pcm_hw_params_any(sndpcm->handle, params);
+	if (err < 0) {
+		fprintf(stderr,
+			"Broken configuration for %s PCM: no configurations available: %s\n", snd_strerror(err), device_name);
+		goto fail_exit;
+	}
+
 
 	/* Set access mode */
-	snd_pcm_hw_params_set_access(sndpcm->handle, params,
+	err = snd_pcm_hw_params_set_access(sndpcm->handle, params,
 		SND_PCM_ACCESS_RW_INTERLEAVED);
+	if (err < 0) {
+		fprintf(stderr,
+			"Access type not available for %s: %s\n", device_name, snd_strerror(err));
+		goto fail_exit;
+	}
 
 	/* Set format */
 	switch (bat->sample_size) {
@@ -63,20 +77,40 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 		format = SND_PCM_FORMAT_S32_LE;
 		break;
 	default:
-		fprintf(stderr, "Not supported format!\n");
+		fprintf(stderr, "error: format not supported!\n");
 		goto fail_exit;
 	}
-	snd_pcm_hw_params_set_format(sndpcm->handle, params, format);
+	err = snd_pcm_hw_params_set_format(sndpcm->handle, params, format);
+	if (err < 0) {
+		fprintf(stderr,
+			"Sample format not available for %s: %s\n", device_name, snd_strerror(err));
+		goto fail_exit;
+	}
 
 	/* Set channels */
-	snd_pcm_hw_params_set_channels(sndpcm->handle, params, bat->channels);
+	err = snd_pcm_hw_params_set_channels(sndpcm->handle, params, bat->channels);
+	if (err < 0) {
+		fprintf(stderr,
+				"Channels count (%i) not available for %s: %s\n", bat->channels, device_name, snd_strerror(err));
+		goto fail_exit;
+	}
 
 	/* Set sampling rate */
-	snd_pcm_hw_params_set_rate_near(sndpcm->handle, params, &bat->rate, 0);
+	rate = bat->rate;
+	err = snd_pcm_hw_params_set_rate_near(sndpcm->handle, params, &bat->rate, 0);
+	if (err < 0) {
+		fprintf(stderr,
+				"Rate %iHz not available for %s: %s\n", bat->rate, device_name, snd_strerror(err));
+		goto fail_exit;
+	}
+	if ((float)rate * 1.05 < bat->rate || (float)rate * 0.95 > bat->rate) {
+		fprintf(stderr, "Rate is not accurate (requested = %iHz, got = %iHz)\n", rate, bat->rate);
+		goto fail_exit;
+	}
 
 	if (snd_pcm_hw_params_get_buffer_time_max(params, &buffer_time,
 			0) < 0) {
-		fprintf(stderr, "Error ...get_buffer_time_max()!\n");
+		fprintf(stderr, "error: snd_pcm_hw_params_get_buffer_time_max returns %i\n", err);
 		goto fail_exit;
 	}
 
@@ -86,34 +120,63 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 	period_time = buffer_time / 8;
 
 	/* Set buffer time and period time */
-	snd_pcm_hw_params_set_buffer_time_near(sndpcm->handle, params,
+	err = snd_pcm_hw_params_set_buffer_time_near(sndpcm->handle, params,
 			&buffer_time, 0);
-	snd_pcm_hw_params_set_period_time_near(sndpcm->handle, params,
-			&period_time, 0);
-
-	/* Write the parameters to the driver */
-	if (snd_pcm_hw_params(sndpcm->handle, params) < 0) {
-		fprintf(stderr, "Unable to set and pcm hw parameters!\n");
+	if (err < 0) {
+		fprintf(stderr,
+				"Unable to set buffer time %i: %s\n", buffer_time, snd_strerror(err));
 		goto fail_exit;
 	}
 
-	snd_pcm_hw_params_get_period_size(params, &sndpcm->period_size, 0);
-	snd_pcm_hw_params_get_buffer_size(params, &sndpcm->buffer_size);
+	err = snd_pcm_hw_params_set_period_time_near(sndpcm->handle, params,
+			&period_time, 0);
+	if (err < 0) {
+		fprintf(stderr,
+				"Unable to set period time %i: %s\n", period_time, snd_strerror(err));
+		goto fail_exit;
+	}
+
+	/* Write the parameters to the driver */
+	if (snd_pcm_hw_params(sndpcm->handle, params) < 0) {
+		fprintf(stderr, "Unable to set hw params for %s: %s\n", device_name, snd_strerror(err));
+		goto fail_exit;
+	}
+
+	err = snd_pcm_hw_params_get_period_size(params, &sndpcm->period_size, 0);
+	if (err < 0) {
+		fprintf(stderr,
+				"Unable to get period size: %s\n", snd_strerror(err));
+		goto fail_exit;
+	}
+
+	err = snd_pcm_hw_params_get_buffer_size(params, &sndpcm->buffer_size);
+	if (err < 0) {
+		fprintf(stderr,
+				"Unable to get buffer size: %s\n", snd_strerror(err));
+		goto fail_exit;
+	}
+
 	if (sndpcm->period_size == sndpcm->buffer_size) {
 		fprintf(stderr,
-			"Can't use period equal to buffer size (%lu = %lu)!\n",
+			"error: can't use period equal to buffer size (%lu = %lu)!\n",
 			sndpcm->period_size, sndpcm->buffer_size);
 		goto fail_exit;
 	}
 
 	sndpcm->sample_bits = snd_pcm_format_physical_width(format);
+	if (sndpcm->sample_bits < 0) {
+		fprintf(stderr,
+			"error: snd_pcm_format_physical_width returns %i\n", err);
+		goto fail_exit;
+	}
+
 	sndpcm->frame_bits = sndpcm->sample_bits * bat->channels;
 
 	/* Calculate the period bytes */
 	sndpcm->period_bytes = sndpcm->period_size * sndpcm->frame_bits / 8;
 	sndpcm->buffer = (char *) malloc(sndpcm->period_bytes);
 	if (sndpcm->buffer == NULL) {
-		fprintf(stderr, "Memory buffer of snd pcm allocated fail!\n");
+		fprintf(stderr, "error: allocation of memory buffer of snd pcm fails!\n");
 		goto fail_exit;
 	}
 

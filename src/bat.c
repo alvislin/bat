@@ -66,18 +66,18 @@ static pthread_t thread_start(struct bat *bat, pthread_t *id, int playback)
 	ret = pthread_create(id, NULL, playback ? bat->playback : bat->capture,
 			(void *) bat);
 	if (ret)
-		fprintf(stderr, "error: cant create thread %d\n", ret);
+		fprintf(stderr, "error: can't create thread %d\n", ret);
 
 	return ret;
 }
 
-static int thread_wait_completion(struct bat *bat, pthread_t id, int *val)
+static int thread_wait_completion(struct bat *bat, pthread_t id, int **val)
 {
 	int err;
 
-	err = pthread_join(id, (void **) &val);
+	err = pthread_join(id, (void **) val);
 	if (err) {
-		fprintf(stderr, "error: cant join thread %d\n", err);
+		fprintf(stderr, "error: can't join thread %d\n", err);
 		pthread_cancel(id);
 	}
 
@@ -88,7 +88,8 @@ static int thread_wait_completion(struct bat *bat, pthread_t id, int *val)
 static void test_loopback(struct bat *bat)
 {
 	pthread_t capture_id, playback_id;
-	int ret, thread_result = 0;
+	int ret;
+	int *thread_result_capture, *thread_result_playback;
 
 	/* start playback */
 	ret = thread_start(bat, &playback_id, 1);
@@ -109,16 +110,16 @@ static void test_loopback(struct bat *bat)
 	}
 
 	/* wait for playback to complete */
-	ret = thread_wait_completion(bat, playback_id, &thread_result);
+	ret = thread_wait_completion(bat, playback_id, &thread_result_playback);
 	if (ret != 0) {
-		fprintf(stderr, "error: cant join playback thread\n");
+		fprintf(stderr, "error: can't join playback thread\n");
 		pthread_cancel(capture_id);
 		exit(EXIT_FAILURE);
 	}
 
 	/* check playback status */
-	if (thread_result != 0) {
-		fprintf(stderr, "error: playback failed %d\n", thread_result);
+	if (*thread_result_playback != 0) {
+		fprintf(stderr, "error: playback failed %d\n", *thread_result_playback);
 		pthread_cancel(capture_id);
 		exit(EXIT_FAILURE);
 	} else
@@ -126,15 +127,15 @@ static void test_loopback(struct bat *bat)
 
 	/* now stop and wait for capture to finish */
 	pthread_cancel(capture_id);
-	ret = thread_wait_completion(bat, capture_id, &thread_result);
+	ret = thread_wait_completion(bat, capture_id, &thread_result_capture);
 	if (ret != 0) {
-		fprintf(stderr, "error: cant join capture thread\n");
+		fprintf(stderr, "error: can't join capture thread\n");
 		exit(EXIT_FAILURE);
 	}
 
 	/* check capture status */
-	if (thread_result != 0) {
-		fprintf(stderr, "error: capture failed %d\n", thread_result);
+	if (*thread_result_capture != 0) {
+		fprintf(stderr, "error: capture failed %d\n", *thread_result_capture);
 		exit(EXIT_FAILURE);
 	} else
 		fprintf(stdout, "Capture completed.\n");
@@ -144,7 +145,8 @@ static void test_loopback(struct bat *bat)
 static void test_playback(struct bat *bat)
 {
 	pthread_t playback_id;
-	int ret, thread_result = 0;
+	int ret;
+	int *thread_result;
 
 	/* start playback */
 	ret = thread_start(bat, &playback_id, 1);
@@ -156,13 +158,13 @@ static void test_playback(struct bat *bat)
 	/* wait for playback to complete */
 	ret = thread_wait_completion(bat, playback_id, &thread_result);
 	if (ret != 0) {
-		fprintf(stderr, "error: cant join playback thread\n");
+		fprintf(stderr, "error: can't join playback thread\n");
 		exit(EXIT_FAILURE);
 	}
 
 	/* check playback status */
-	if (thread_result != 0) {
-		fprintf(stderr, "error: playback failed %d\n", thread_result);
+	if (*thread_result != 0) {
+		fprintf(stderr, "error: playback failed %d\n", *thread_result);
 		exit(EXIT_FAILURE);
 	} else
 		fprintf(stdout, "Playback completed.\n");
@@ -173,7 +175,8 @@ static void test_playback(struct bat *bat)
 static void test_capture(struct bat *bat)
 {
 	pthread_t capture_id;
-	int ret, thread_result = 0;
+	int ret;
+	int *thread_result;
 
 	/* start capture */
 	ret = thread_start(bat, &capture_id, 0);
@@ -187,13 +190,13 @@ static void test_capture(struct bat *bat)
 	/* wait for capture to complete */
 	ret = thread_wait_completion(bat, capture_id, &thread_result);
 	if (ret != 0) {
-		fprintf(stderr, "error: cant join capture thread\n");
+		fprintf(stderr, "error: can't join capture thread\n");
 		exit(EXIT_FAILURE);
 	}
 
 	/* check playback status */
-	if (thread_result != 0) {
-		fprintf(stderr, "error: capture failed %d\n", thread_result);
+	if (*thread_result != 0) {
+		fprintf(stderr, "error: capture failed %d\n", *thread_result);
 		exit(EXIT_FAILURE);
 	} else
 		fprintf(stdout, "Capture completed.\n");
@@ -372,7 +375,7 @@ static void bat_init(struct bat *bat)
 	} else {
 		bat->fp = fopen(bat->playback_file, "rb");
 		if (bat->fp == NULL) {
-			fprintf(stderr, "error: cant open %s %d\n",
+			fprintf(stderr, "error: can't open %s %d\n",
 				bat->playback_file, -errno);
 			exit(EXIT_FAILURE);
 		}
