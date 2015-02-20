@@ -248,7 +248,7 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hf:s:n:c:F:r:D:P:C:k::l::t::abp:"))
+	while ((opt = getopt(argc, argv, "hf:s:n:c:F:r:D:P:C:k:p:ltab"))
 			!= -1) {
 		switch (opt) {
 		case 'D':

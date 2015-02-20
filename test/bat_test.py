@@ -235,13 +235,13 @@ if __name__ == '__main__':
     parse_command_line()
     
     # Testing plughw by default
-#     test_file_analysis(testset_alsa,"with ALSA testset")
-#             
-#     test_file_loopback(testset_alsa,"ALSA")
-#     test_sine_loopback(testset_alsa,"ALSA");  
-#         
-#     test_file_loopback(testset_tinyalsa,"TYNIALSA",['-t'])
-#     test_sine_loopback(testset_tinyalsa,"TYNIALSA",['-t'])
+    test_file_analysis(testset_alsa,"with ALSA testset")
+            
+    test_file_loopback(testset_alsa,"ALSA")
+    test_sine_loopback(testset_alsa,"ALSA");  
+         
+    test_file_loopback(testset_tinyalsa,"TYNIALSA",['-t'])
+    test_sine_loopback(testset_tinyalsa,"TYNIALSA",['-t'])
          
     test_single_line_mode(testset_alsa,"ALSA")
     test_single_line_mode(testset_tinyalsa,"TYNIALSA",['-t'])

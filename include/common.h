@@ -9,6 +9,7 @@
 #define WAV_DATA        COMPOSE('d', 'a', 't', 'a')
 
 #define MAX_NUMBER_OF_CHANNELS		2
+#define MAX_NB_OF_PEAK				10
 
 struct wav_header {
 	unsigned int magic; /* 'RIFF' */
