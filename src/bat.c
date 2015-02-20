@@ -211,8 +211,8 @@ static void usage(char *argv[])
 		"         [-n frames to capture] [-k sigma k] [-F Target Freq]\n"
 		"         [-l internal loop, bypass hardware]\n"
 		"         [-t use tinyalsa instead of alsa]\n"
-		"         [-a single ended capture]\n"
-		"         [-b single ended playback]\n"
+		"         [-a single ended capture (deprecated, use -C alone)]\n"
+		"         [-b single ended playback (deprecated, use -P alone)]\n"
 		"         [-p total number of periods to play/capture]\n",
 		argv[0]);
 	fprintf(stdout, "Usage:%s [-h]\n", argv[0]);
@@ -258,9 +258,17 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 				bat->capture_device = optarg;
 			break;
 		case 'P':
+			if (bat->capture_single == true)
+				bat->capture_single = false;
+			else
+				bat->playback_single = true;
 			bat->playback_device = optarg;
 			break;
 		case 'C':
+			if (bat->playback_single == true)
+				bat->playback_single = false;
+			else
+				bat->capture_single = true;
 			bat->capture_device = optarg;
 			break;
 		case 'f':
@@ -349,9 +357,11 @@ static void bat_init(struct bat *bat)
 
 	/* Determine tiny device if needed */
 	if (bat->tinyalsa == true) {
-		get_tiny_format(bat->capture_device, &bat->capture_card_tiny,
+		if (bat->playback_single == false)
+			get_tiny_format(bat->capture_device, &bat->capture_card_tiny,
 				&bat->capture_device_tiny);
-		get_tiny_format(bat->playback_device, &bat->playback_card_tiny,
+		if (bat->capture_single == false)
+			get_tiny_format(bat->playback_device, &bat->playback_card_tiny,
 				&bat->playback_device_tiny);
 	}
 
