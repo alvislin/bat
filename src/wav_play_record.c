@@ -51,7 +51,8 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 	err = snd_pcm_hw_params_any(sndpcm->handle, params);
 	if (err < 0) {
 		fprintf(stderr,
-			"Broken configuration for %s PCM: no configurations available: %s\n", snd_strerror(err), device_name);
+			"Broken configuration for %s PCM: no configurations available: %s\n",
+			snd_strerror(err), device_name);
 		goto fail_exit;
 	}
 

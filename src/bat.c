@@ -31,9 +31,28 @@
 #include "common.h"
 #include "analyze.h"
 
+static void get_duration(struct bat *bat)
+{
+	float duration_f;
+	int duration_i;
+	char *ptrf, *ptri;
+
+	duration_f = strtod(bat->narg, &ptrf);
+	duration_i = strtol(bat->narg, &ptri, 10);
+	if (*ptrf == 's')
+		bat->frames = duration_f*bat->rate;
+	else if (*ptri == 0)
+		bat->frames = duration_i;
+	else {
+		fprintf(stderr, "error: -n argument is not valid\n");
+		exit(EXIT_FAILURE);
+	}
+}
+
 static void get_sine_frequencies(struct bat *bat, char *freq)
 {
 	char *tmp1;
+
 	tmp1 = strchr(freq, ',');
 	if (tmp1 == NULL) {
 		bat->target_freq[1] = bat->target_freq[0] = atof(optarg);
@@ -99,7 +118,8 @@ static void test_loopback(struct bat *bat)
 	}
 
 	/* TODO: use a pipe to signal stream start etc - i.e. to sync threads */
-	sleep(1); /* Let time for playing something before recording */
+	/* Let some time for playing something before capturing */
+	usleep(PLAYBACK_TIME_BEFORE_CAPTURE*1000);
 
 	/* start capture */
 	ret = thread_start(bat, &capture_id, 0);
@@ -275,7 +295,7 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 			bat->playback_file = optarg;
 			break;
 		case 'n':
-			bat->frames = atoi(optarg);
+			bat->narg = optarg;
 			break;
 		case 'F':
 			get_sine_frequencies(bat, optarg);
@@ -349,6 +369,10 @@ static void bat_init(struct bat *bat)
 {
 	int ret;
 
+	/* Determine n */
+	if (bat->narg != 0)
+		get_duration(bat);
+
 	/* Determine capture file */
 	if (bat->local == true)
 		bat->capture_file = bat->playback_file;
@@ -372,10 +396,10 @@ static void bat_init(struct bat *bat)
 				/* Play nb of frames given by -n argument */
 				bat->sinus_duration = bat->frames;
 			} else {
-				/* Play 1 sec + twice the nb of frames
-				 * to be analysed */
-				bat->sinus_duration = bat->rate;
-				bat->sinus_duration += 2 * bat->frames;
+				/* Play PLAYBACK_TIME_BEFORE_CAPTURE msec +
+				 * 150% of the nb of frames to be analysed */
+				bat->sinus_duration = bat->rate * PLAYBACK_TIME_BEFORE_CAPTURE / 1000;
+				bat->sinus_duration += (bat->frames + bat->frames / 2);
 			}
 		} else {
 			/* Special case where we want to generate a sine wave

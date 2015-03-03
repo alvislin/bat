@@ -8,8 +8,9 @@
 #define WAV_FMT         COMPOSE('f', 'm', 't', ' ')
 #define WAV_DATA        COMPOSE('d', 'a', 't', 'a')
 
-#define MAX_NUMBER_OF_CHANNELS		2
-#define MAX_NB_OF_PEAK				10
+#define MAX_NUMBER_OF_CHANNELS			2
+#define MAX_NB_OF_PEAK					10
+#define PLAYBACK_TIME_BEFORE_CAPTURE	500		/* Given in ms */
 
 struct wav_header {
 	unsigned int magic; /* 'RIFF' */
@@ -59,6 +60,7 @@ struct bat {
 	float target_freq[MAX_NUMBER_OF_CHANNELS];
 
 	int sinus_duration;
+	char *narg;
 
 	/* TODO: this can be consolidated into a struct for
 	 * playback + capture */

@@ -58,7 +58,7 @@ BAT should be used as this :
     
 2- Loopback with a auto generated sine wawe as input
     bat -D plughw:0,0 -r 44100 -c 2 -s 2 -n 88200 -F 250,500 [-l]
-    bat -P plughw:0,3 -C plughw:0,0 -r 16000 -c 2 -s 2 -n 16000 -F 250 [-l]
+    bat -P plughw:0,3 -C plughw:0,0 -r 16000 -c 2 -s 2 -n 1s -F 250 [-l]
     
 3- Play endlessly a sinus wave at 44k1Hz on one channel with 16bits per sample.
     bat -D plughw:0,0 -r 44100 -c 1 -s 2 -n 0 
@@ -80,6 +80,7 @@ Option -F is used to specify the sine wave frequency of the input data.
 Option -n is used to specify the number of frames to be analyzed (if set to 0,
  then no analyzis is done and it plays endlessly). In single line mode (-C or
  -P), it is used to specify how many samples to play or capture.
+ n can be given in number of samples or in second (ex: -n 2.1s)
 
 Option -C and -P when used not together, are used to set single ended mode.
  i.e. only playback or capture.
