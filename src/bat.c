@@ -426,6 +426,8 @@ int main(int argc, char *argv[])
 	struct bat bat;
 	int ret = 0;
 
+	fprintf(stdout,"%s version %s\n\n",PACKAGE_NAME, PACKAGE_VERSION);
+
 	set_defaults(&bat);
 
 	parse_arguments(&bat, argc, argv);
