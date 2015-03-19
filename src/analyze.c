@@ -14,6 +14,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -32,6 +33,7 @@ static int convert(struct bat *bat, struct analyze *a)
 {
 	void *s = a->buf;
 	int i;
+	int32_t tmp;
 
 	for (i = 0; i < bat->frames; i++) {
 		switch (bat->sample_size) {
@@ -40,6 +42,13 @@ static int convert(struct bat *bat, struct analyze *a)
 			break;
 		case 2:
 			a->in[i] = ((int16_t *) s)[i];
+			break;
+		case 3:
+			tmp = ((uint8_t *) s)[i*3+2] << 24 ;
+			tmp |= ((uint8_t *) s)[i*3+1] << 16 ;
+			tmp |= ((uint8_t *) s)[i*3] << 8 ;
+			tmp >>= 8 ;
+			a->in[i] = tmp;
 			break;
 		case 4:
 			a->in[i] = ((int32_t *) s)[i];

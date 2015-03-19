@@ -38,7 +38,7 @@ test_nb = 0;
 expected_fail = False
 
 # Test set for alsa
-testset_alsa = {'channel':(1, 2), 'sample size':(1, 2, 4), 'frequency':(8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 192000)}
+testset_alsa = {'channel':(1, 2), 'sample size':(1, 2, 3, 4), 'frequency':(8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 192000)}
 testset_tinyalsa = {'channel':(2,), 'sample size':(2, 4), 'frequency':(44100, 192000)}
 testset_hw = {'channel':(2,), 'sample size':(2, 4), 'frequency':(44100, 48000, 96000, 192000)}
 testset_hw_fail1 = {'channel':(1,), 'sample size':(2, 4), 'frequency':(44100, 48000, 96000, 192000)}
@@ -63,6 +63,9 @@ def generate_wav_file(ch, ss, r, f, sf):
     elif (ss == 2):
         amplitude = 32760
         formatting = 'h'
+    elif (ss == 3):
+        amplitude = 8388600
+        formatting = 'i'
     elif (ss == 4):
         amplitude = 2147483648
         formatting = 'i'
@@ -75,7 +78,7 @@ def generate_wav_file(ch, ss, r, f, sf):
             sin_val = sin_val / float(r)
             val = gain * amplitude * math.sin(sin_val * 2 * math.pi)
             packed_val = struct.pack(formatting, int(val))           
-            values.append(packed_val)
+            values.append(packed_val[0:ss])
         sine += 1
     
     values_str = ''.join(values)
@@ -150,7 +153,7 @@ def test_arg_n_sine_gen(testset):
     for ch in testset['channel']:
         for s in testset['sample size']:
             for r in testset['frequency']:
-                expected_duration = float(random.randint(5, 40)) / 10
+                expected_duration = float(random.randint(14, 40)) / 10
                 f = str(expected_duration) + 's';
                 sf = [random.randint(10, 2 * r / 5) for x in xrange(ch)]
                 print '-' * 80
@@ -192,7 +195,7 @@ def test_arg_n_single_line(testset):
     for ch in testset['channel']:
         for s in testset['sample size']:
             for r in testset['frequency']:
-                expected_duration = float(random.randint(5, 40)) / 10
+                expected_duration = float(random.randint(14, 40)) / 10
                 f = str(expected_duration) + 's';
                 sf = [random.randint(10, 2 * r / 5) for x in xrange(ch)]
                 print '-' * 80

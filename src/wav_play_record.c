@@ -1,3 +1,20 @@
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -10,7 +27,7 @@
 #include "common.h"
 #include "wav_play_record.h"
 
-/*#define DEBUG*/
+//#define DEBUG			/* Uncomment if you want to save in /tmp/sin.wav the input data */
 
 struct snd_pcm_container {
 	snd_pcm_t *handle;
@@ -73,6 +90,9 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 		break;
 	case 2:
 		format = SND_PCM_FORMAT_S16_LE;
+		break;
+	case 3:
+		format = SND_PCM_FORMAT_S24_3LE;
 		break;
 	case 4:
 		format = SND_PCM_FORMAT_S32_LE;
@@ -243,6 +263,10 @@ static int generate_input_data(struct snd_pcm_container sndpcm, int count,
 			buf = (int16_t *) sndpcm.buffer;
 			max = INT16_MAX-10;
 			break;
+		case 3:
+			buf = (int8_t *) sndpcm.buffer;
+			max = (1<<23)-50;
+			break;
 		case 4:
 			buf = (int32_t *) sndpcm.buffer;
 			max = INT32_MAX-100;
@@ -326,7 +350,7 @@ void *playback_alsa(void *bat_param)
 				bat->playback_file);
 	}
 
-	count = sndpcm.period_bytes;
+	count = sndpcm.period_bytes;				/* playback buffer size */
 #ifdef DEBUG
 	FILE *sin_file;
 	sin_file = fopen("/tmp/sin.wav", "wb");

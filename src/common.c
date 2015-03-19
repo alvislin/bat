@@ -1,8 +1,18 @@
 /*
- * common.c
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  Created on: 6 Oct 2014
- *      Author: gautier
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
  */
 
 #include <stdio.h>
@@ -158,10 +168,14 @@ int read_wav_header(struct bat *bat)
 
 			break;
 		case WAV_DATA:
-			/* FIXME The number of analysed captured frames is
-			 * arbitrarily set to half of the number of frames */
-			bat->frames = chunk_header.length / bat->frame_size
-				/ 2;
+			/* The number of analysed captured frames is
+			 * arbitrarily set to half of the number of frames
+			 * of the wav file or the number of frames of the
+			 * wav file when doing direct analysis (-l) */
+			bat->frames = chunk_header.length / bat->frame_size;
+			if (!bat->local)
+				bat->frames /= 2;
+
 			/* Stop looking for chunks */
 			more_chunks = 0;
 			break;
@@ -211,12 +225,20 @@ void generate_sine_wave(struct bat *bat, int length, void *buf, int max)
 	for (k = 0; k < length; k++) {
 		for (c = 0; c < bat->channels; c++) {
 			float sinus_f = sin(i * 2.0 * M_PI * sin_val[c]) * max;
+			int32_t sinus_f_i;
 			switch (bat->sample_size) {
 			case 1:
 				*((int8_t *) buf) = (int8_t) (sinus_f);
 				break;
 			case 2:
 				*((int16_t *) buf) = (int16_t) (sinus_f);
+				break;
+			case 3:
+				/* FIXME is dependent of endianess */
+				sinus_f_i = (int32_t)sinus_f;
+				*((int8_t *) (buf+0)) = (int8_t) (sinus_f_i & 0xff);
+				*((int8_t *) (buf+1)) = (int8_t) ((sinus_f_i>>8) & 0xff);
+				*((int8_t *) (buf+2)) = (int8_t) ((sinus_f_i>>16) & 0xff);
 				break;
 			case 4:
 				*((int32_t *) buf) = (int32_t) (sinus_f);
