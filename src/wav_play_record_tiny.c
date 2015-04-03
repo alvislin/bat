@@ -91,7 +91,7 @@ static int generate_input_data(char *buffer, int size, struct bat *bat)
 	static int load;
 	int num_read;
 
-	if (bat->playback_file != NULL) {
+	if (bat->playback.file != NULL) {
 		num_read = fread(buffer, 1, size, bat->fp);
 	} else {
 		if ((bat->sinus_duration) && (load > bat->sinus_duration))
@@ -244,27 +244,26 @@ static unsigned int play_sample(unsigned int card, unsigned int device,
 /**
  * Play
  */
-void *playback_tinyalsa(void *bat_param)
+void *playback_tinyalsa(struct bat *bat)
 {
 	unsigned int period_size = 1024;
 	unsigned int period_count = 4;
 	unsigned int ret;
 
-	struct bat *bat = (struct bat *) bat_param;
 	retval_play = 0;
 
-	fprintf(stdout, "Entering playback thread (tinyalsa).\n");
+	printf("Entering playback thread (tinyalsa).\n");
 
-	if (bat->playback_file == NULL) {
-		fprintf(stdout, "Playing generated audio sine wave ");
+	if (bat->playback.file == NULL) {
+		printf("Playing generated audio sine wave ");
 		bat->sinus_duration == 0 ?
-			fprintf(stdout, "endlessly\n") : fprintf(stdout, "\n");
+			printf("endlessly\n") : printf("\n");
 	} else {
-		fprintf(stdout, "Playing input audio file: %s\n",
-				bat->playback_file);
+		printf("Playing input audio file: %s\n",
+				bat->playback.file);
 	}
 
-	ret = play_sample(bat->playback_card_tiny, bat->playback_device_tiny,
+	ret = play_sample(bat->playback.card_tiny, bat->playback.device_tiny,
 			bat, period_size, period_count);
 	if (ret == 0)
 		retval_play = 1;
@@ -296,7 +295,7 @@ static unsigned int capture_sample(FILE *file, struct bat *bat,
 
 	printf("rate: %i, format: %i\n", config.rate, config.format);
 
-	pcm = pcm_open(bat->capture_card_tiny, bat->capture_device_tiny,
+	pcm = pcm_open(bat->capture.card_tiny, bat->capture.device_tiny,
 			PCM_IN, &config);
 	if (!pcm || !pcm_is_ready(pcm)) {
 		fprintf(stderr, "Unable to open PCM device (%s)!\n",
@@ -348,7 +347,7 @@ static unsigned int capture_sample(FILE *file, struct bat *bat,
 /**
  * Record
  */
-void *record_tinyalsa(void *bat_param)
+void *record_tinyalsa(struct bat *bat)
 {
 	FILE *file = NULL;
 	struct wav_container header;
@@ -357,7 +356,6 @@ void *record_tinyalsa(void *bat_param)
 	enum pcm_format format = 0;
 	unsigned int ret;
 
-	struct bat *bat = (struct bat *) bat_param;
 	switch (bat->sample_size) {
 	case 1:
 		format = PCM_FORMAT_S8;
@@ -374,13 +372,13 @@ void *record_tinyalsa(void *bat_param)
 	}
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-	fprintf(stdout, "Entering capture thread (tinyalsa).\n");
+	printf("Entering capture thread (tinyalsa).\n");
 
-	remove(bat->capture_file);
-	file = fopen(bat->capture_file, "wb");
+	remove(bat->capture.file);
+	file = fopen(bat->capture.file, "wb");
 	if (!file) {
 		fprintf(stderr, "Cannot create file: %s!\n",
-				bat->capture_file);
+				bat->capture.file);
 		goto fail_exit;
 	}
 
@@ -388,7 +386,7 @@ void *record_tinyalsa(void *bat_param)
 	header.header.type = WAV_WAVE;
 	header.format.magic = WAV_FMT;
 	header.format.fmt_size = 16;
-	header.format.format = FORMAT_PCM;
+	header.format.format = WAV_FORMAT_PCM;
 	header.chunk.type = WAV_DATA;
 	header.format.channels = bat->channels;
 	header.format.sample_rate = bat->rate;

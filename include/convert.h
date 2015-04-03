@@ -15,8 +15,11 @@
  *
  */
 
-extern int retval_play;
-extern int retval_record;
-
-void *playback_alsa(struct bat *);
-void *record_alsa(struct bat *);
+double convert_int8_to_double(void *, int);
+double convert_int16_to_double(void *, int);
+double convert_int24_to_double(void *, int);
+double convert_int32_to_double(void *, int);
+void convert_float_to_int8(float, void *);
+void convert_float_to_int16(float, void *);
+void convert_float_to_int24(float, void *);
+void convert_float_to_int32(float, void *);

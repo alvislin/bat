@@ -7,6 +7,8 @@ bat_SOURCES = \
 	bat.c \
 	common.c \
 	analyze.c \
+	signal.c \
+	convert.c \
 	wav_play_record.c
 	
 if TINYALSA

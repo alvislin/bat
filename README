@@ -119,6 +119,14 @@ BAT will return a negative result on any errors and 0 if fundamental frequency
 
 It can also be used to generate a continuous sine wave.
 
+Returned errors
+===============
+0:	No error
+-1: 	General error
+-100: 	No peak detected
+-101:	Peak detected at DC level (<7hz)
+-102:	Peak detected not at right position
+
 Notes
 =====
 If option -f is given, then parameter from arguments c, r, n and s are read from

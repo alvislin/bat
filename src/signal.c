@@ -15,8 +15,32 @@
  *
  */
 
-extern int retval_play;
-extern int retval_record;
+#include <stdio.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <math.h>
+#include <stdbool.h>
 
-void *playback_alsa(struct bat *);
-void *record_alsa(struct bat *);
+#include "common.h"
+
+void generate_sine_wave(struct bat *bat, int length, void *buf, int max)
+{
+	static int i;
+	int k, c;
+	float sin_val[MAX_NUMBER_OF_CHANNELS];
+
+	for (c = 0; c < bat->channels; c++)
+		sin_val[c] = (float) bat->target_freq[c] / (float) bat->rate;
+
+	for (k = 0; k < length; k++) {
+		for (c = 0; c < bat->channels; c++) {
+			float sinus_f = sin(i * 2.0 * M_PI * sin_val[c]) * max;
+			bat->convert_float_to_sample(sinus_f, buf);
+			buf += bat->sample_size;
+		}
+		i += 1;
+		if (i == bat->rate)
+			i = 0; /* Restart from 0 after one sine wave period */
+	}
+}
+

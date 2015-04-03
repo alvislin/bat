@@ -26,39 +26,17 @@
 
 #include "common.h"
 
-/*
+/**
  * Convert from sample size to double
  */
 static int convert(struct bat *bat, struct analyze *a)
 {
 	void *s = a->buf;
 	int i;
-	int32_t tmp;
 
-	for (i = 0; i < bat->frames; i++) {
-		switch (bat->sample_size) {
-		case 1:
-			a->in[i] = ((int8_t *) s)[i];
-			break;
-		case 2:
-			a->in[i] = ((int16_t *) s)[i];
-			break;
-		case 3:
-			tmp = ((uint8_t *) s)[i*3+2] << 24 ;
-			tmp |= ((uint8_t *) s)[i*3+1] << 16 ;
-			tmp |= ((uint8_t *) s)[i*3] << 8 ;
-			tmp >>= 8 ;
-			a->in[i] = tmp;
-			break;
-		case 4:
-			a->in[i] = ((int32_t *) s)[i];
-			break;
-		default:
-			fprintf(stderr, "Unsupported sample size!\n");
-			return -1;
-			break;
-		}
-	}
+	for (i = 0; i < bat->frames; i++)
+		a->in[i] = bat->convert_sample_to_double(s, i);
+
 	return 0;
 }
 /**
@@ -66,41 +44,40 @@ static int convert(struct bat *bat, struct analyze *a)
  * @return 0 if peak detected at right frequency, 1 if peak detected somewhere else
  *         2 if DC detected
  */
-int check_peak(int end, int peak, float hz, float mean, float p, int channel,
-		struct analyze *a, int start, struct bat *bat)
+int check_peak(struct bat *bat, struct analyze *a, int end, int peak, float hz,
+		float mean, float p, int channel, int start)
 {
 	int ret;
+	float hz_peak = ((float) (peak) + 1.0) * hz;
 
-	fprintf(stdout, "Detected peak at %2.2f Hz of %2.2f dB\n",
-		(peak + 1) * hz,
-		10.0 * log10(a->mag[peak] / mean));
-	fprintf(stdout, " Total %3.1f dB from %2.2f to %2.2f Hz\n",
-		10.0 * log10(p / mean), (start + 1) * hz,
-		(end + 1) * hz);
+	printf("Detected peak at %2.2f Hz of %2.2f dB\n", hz_peak,
+			10.0 * log10(a->mag[peak] / mean));
+	printf(" Total %3.1f dB from %2.2f to %2.2f Hz\n",
+			10.0 * log10(p / mean), (start + 1) * hz,
+			(end + 1) * hz);
 
-	if ((peak + 1) * hz < 7.01) {
+	if (hz_peak < DC_TRESHOLD) {
 		fprintf(stdout,
 				" WARNING: Found low peak %2.2f Hz, very close to DC\n",
-		(peak + 1) * hz);
-		ret = 2;
-	} else if ((peak + 1) * hz < bat->target_freq[channel] - 1.0) {
-		fprintf(stdout, " FAIL: Peak freq too low %2.2f Hz\n",
-		(peak + 1) * hz);
-		ret = 1;
-	} else if ((peak + 1) * hz > bat->target_freq[channel] + 1.0) {
-		fprintf(stdout, " FAIL: Peak freq too high %2.2f Hz\n",
-			(peak + 1) * hz);
-		ret = 1;
-	} else {
+				hz_peak);
+		ret = FOUND_DC;
+	} else if (hz_peak < bat->target_freq[channel] - 1.0) {
+		printf(" FAIL: Peak freq too low %2.2f Hz\n", hz_peak);
+		ret = FOUND_WRONG_PEAK;
+	} else if (hz_peak > bat->target_freq[channel] + 1.0) {
 		fprintf(stdout,
-			" PASS: Peak detected at target frequency\n");
+				" FAIL: Peak freq too high %2.2f Hz\n",
+				hz_peak);
+		ret = FOUND_WRONG_PEAK;
+	} else {
+		printf(" PASS: Peak detected at target frequency\n");
 		ret = 0;
 	}
 
 	return ret;
 }
 
-/*
+/**
  * Search for main frequencies in fft results and compare it to target
  */
 static int check(struct bat *bat, struct analyze *a, int channel)
@@ -130,10 +107,7 @@ static int check(struct bat *bat, struct analyze *a, int channel)
 
 			/* find peak start points */
 			if (start == -1) {
-				start = i;
-				peak = i;
-				end = i;
-				p = 0;
+				start = peak = end = i;
 				signals++;
 			} else {
 				if (a->mag[i] > a->mag[peak])
@@ -143,24 +117,23 @@ static int check(struct bat *bat, struct analyze *a, int channel)
 			p += a->mag[i];
 		} else if (start != -1) {
 			/* Check if peak is as expected */
-			ret |= check_peak(end, peak, hz, mean, p, channel, a,
-					start, bat);
+			ret |= check_peak(bat, a, end, peak, hz, mean,
+					p, channel, start);
 			end = start = -1;
 			if (signals == MAX_NB_OF_PEAK)
 				break;
 		}
 	}
 	if (signals == 0)
-		ret = -EIO;		/* No peak detected */
-	else if ((ret == 2) && (signals == 1))
-		ret = -EIO;		/* Only DC detected */
-	else if ((ret == 1) || (ret == 3))
-		ret = -EIO;		/* Bad peak detected */
+		ret = -ENOPEAK; /* No peak detected */
+	else if ((ret == FOUND_DC) && (signals == 1))
+		ret = -EONLYDC; /* Only DC detected */
+	else if ((ret & FOUND_WRONG_PEAK) == FOUND_WRONG_PEAK)
+		ret = -EBADPEAK; /* Bad peak detected */
 	else
-		ret = 0;		/* Correct peak detected */
+		ret = 0; /* Correct peak detected */
 
-
-	fprintf(stdout, "Detected at least %d signal(s) in total\n", signals);
+	printf("Detected at least %d signal(s) in total\n", signals);
 
 	return ret;
 }
@@ -230,7 +203,7 @@ out1:
 	return ret;
 }
 
-/*
+/**
  * Convert interleaved samples from channels in samples from a single channel
  */
 static int reorder_data(struct bat *bat)
@@ -268,13 +241,13 @@ int analyze_capture(struct bat *bat)
 	int c;
 
 	fprintf(stdout,
-		"\nBAT analysed signal is %d frames at %d Hz, %d channels, "
-		"%d bytes per sample\n",
-		bat->frames, bat->rate, bat->channels, bat->sample_size);
+			"\nBAT analysed signal is %d frames at %d Hz, %d channels, "
+			"%d bytes per sample\n", bat->frames, bat->rate,
+			bat->channels, bat->sample_size);
 
-	bat->fp = fopen(bat->capture_file, "rb");
+	bat->fp = fopen(bat->capture.file, "rb");
 	if (bat->fp == NULL) {
-		fprintf(stderr, "failed to open %s!\n", bat->capture_file);
+		fprintf(stderr, "failed to open %s!\n", bat->capture.file);
 		return -ENOENT;
 	}
 
@@ -283,7 +256,7 @@ int analyze_capture(struct bat *bat)
 		return -ENOMEM;
 
 	/* Skip header */
-	ret = skip_wav_header(bat);
+	ret = read_wav_header(bat, bat->capture.file, true);
 	if (ret != 0)
 		return ret;
 
@@ -299,11 +272,12 @@ int analyze_capture(struct bat *bat)
 
 	for (c = 0; c < bat->channels; c++) {
 		struct analyze a;
-
-		printf("\nChannel %i - Checking for target frequency %2.2f Hz\n",
-			c + 1, bat->target_freq[c]);
+		printf("\nChannel %i - ", c + 1);
+		printf("Checking for target frequency %2.2f Hz\n",
+				bat->target_freq[c]);
 		a.buf = bat->buf +
-			(c * bat->frames * bat->frame_size / bat->channels);
+				c * bat->frames * bat->frame_size
+				/ bat->channels;
 		ret = find_and_check_harmonics(bat, &a, c);
 	}
 
