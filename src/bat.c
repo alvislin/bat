@@ -224,8 +224,6 @@ static void usage(char *argv[])
 			"         [-n frames to capture] [-k sigma k] [-F Target Freq]\n"
 			"         [-l internal loop, bypass hardware]\n"
 			"         [-t use tinyalsa instead of alsa]\n"
-			"         [-a single ended capture (deprecated, use -C alone)]\n"
-			"         [-b single ended playback (deprecated, use -P alone)]\n"
 			"         [-p total number of periods to play/capture]\n",
 			argv[0]);
 	printf("Usage:%s [-h]\n", argv[0]);
@@ -310,12 +308,6 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 		case 'l':
 			bat->local = true;
 			break;
-		case 'a':
-			bat->capture.single = true;
-			break;
-		case 'b':
-			bat->playback.single = true;
-			break;
 		case 'p':
 			bat->periods_total = atoi(optarg);
 			bat->period_limit = true;
@@ -339,6 +331,8 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 
 static void validate_options(struct bat *bat)
 {
+	int c;
+
 	/* check we have an input file for local mode */
 	if ((bat->local == true) && (bat->capture.file == NULL)) {
 		fprintf(stderr, "error: no input file for local testing\n");
@@ -356,6 +350,16 @@ static void validate_options(struct bat *bat)
 	if (bat->playback.single && bat->capture.single) {
 		fprintf(stderr, "error: single ended mode is simplex\n");
 		exit(EXIT_FAILURE);
+	}
+
+	/* check sine wave frequency range*/
+	for (c = 0; c < bat->channels; c++) {
+		if (bat->target_freq[c] < DC_TRESHOLD
+				|| bat->target_freq[c] > 2*bat->rate/5) {
+			fprintf(stderr, "error: sine wave frequency is out ");
+			fprintf(stderr, "of range\n");
+			exit(EXIT_FAILURE);
+		}
 	}
 }
 
@@ -404,6 +408,7 @@ static void bat_init(struct bat *bat)
 			/* Special case where we want to generate a sine wave
 			 * endlessly without capturing */
 			bat->sinus_duration = 0;
+			bat->playback.single = true;
 		}
 	} else {
 		bat->fp = fopen(bat->playback.file, "rb");
@@ -419,7 +424,7 @@ static void bat_init(struct bat *bat)
 
 	bat->frame_size = bat->sample_size * bat->channels;
 
-	/* Set convert function */
+	/* Set conversion functions */
 	switch (bat->sample_size) {
 	case 1:
 		bat->convert_float_to_sample = convert_float_to_int8;
@@ -442,7 +447,6 @@ static void bat_init(struct bat *bat)
 		exit(EXIT_FAILURE);
 		break;
 	}
-
 }
 
 int main(int argc, char *argv[])

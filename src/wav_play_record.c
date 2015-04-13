@@ -422,9 +422,6 @@ void *record_alsa(struct bat *bat)
 	struct wav_container wav;
 	int size, offset, count, frames;
 
-	if (bat->sinus_duration == 0 && bat->playback.file == NULL)
-		return 0; /* No capture when playing sine wave endlessly */
-
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
 	printf("Entering capture thread (ALSA).\n");
@@ -460,7 +457,7 @@ void *record_alsa(struct bat *bat)
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 	pthread_cleanup_push(close_handle, sndpcm.handle);
 	pthread_cleanup_push(destroy_mem, sndpcm.buffer);
-	pthread_cleanup_push(close_file, fp);
+	pthread_cleanup_push((void *)close_file, fp);
 
 	if (fwrite(&wav.header, 1,
 			sizeof(wav.header), fp)
@@ -473,14 +470,14 @@ void *record_alsa(struct bat *bat)
 			sizeof(wav.format), fp)
 			!= sizeof(wav.format)) {
 		fprintf(stderr,
-				"Error write wav file header!\n");
+				"Error write wav file format!\n");
 		goto fail_exit;
 	}
 	if (fwrite(&wav.chunk, 1,
 			sizeof(wav.chunk), fp)
 			!= sizeof(wav.chunk)) {
 		fprintf(stderr,
-				"Error write wav file header!\n");
+				"Error write wav file chunck!\n");
 		goto fail_exit;
 	}
 

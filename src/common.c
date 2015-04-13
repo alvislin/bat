@@ -26,11 +26,10 @@
 int retval_play;
 int retval_record;
 
-void close_file(void *file)
+void close_file(FILE *file)
 {
-	FILE *fp = file;
-	if (NULL != fp)
-		fclose(fp);
+	if (NULL != file)
+		fclose(file);
 }
 
 void destroy_mem(void *block)

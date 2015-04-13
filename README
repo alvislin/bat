@@ -84,10 +84,12 @@ Option -n is used to specify the number of frames to be analyzed (if set to 0,
 
 Option -C and -P when used not together, are used to set single ended mode.
  i.e. only playback or capture.
- Option -a and -b can serve the same purpose but will be soon deprecated. 
 
-option -p used to limit the number of periods played or captured. 
+option -p is used to limit the number of periods played or captured. 
  Use -n instead.
+ 
+option -k is used to define to clip any peaks not significant for testing
+ purposes. Default value should fit most of cases.
 
 For using a wav file as input:
 ------------------

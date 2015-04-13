@@ -220,7 +220,7 @@ static int reorder_data(struct bat *bat)
 		return -ENOMEM;
 
 	for (ch = 0; ch < bat->channels; ch++) {
-		for (j = 0; j < bat->frames; j += 1) {
+		for (j = 0; j < bat->frames; j++) {
 			for (i = 0; i < bat->sample_size; i++) {
 				*p++ = ((char *) (bat->buf))[j * bat->frame_size
 						+ ch * bat->sample_size + i];
@@ -241,7 +241,7 @@ int analyze_capture(struct bat *bat)
 	int c;
 
 	fprintf(stdout,
-			"\nBAT analysed signal is %d frames at %d Hz, %d channels, "
+			"\nBAT analysed signal has %d frames at %d Hz, %d channels, "
 			"%d bytes per sample\n", bat->frames, bat->rate,
 			bat->channels, bat->sample_size);
 

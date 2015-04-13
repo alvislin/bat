@@ -293,6 +293,19 @@ def test_argument_n(name):
     test_arg_n_sine_gen(testset_arg_n)  
     test_arg_n_single_line(testset_arg_n)
 
+def test_argument_F(name):
+    print '#' * 80
+    print '#' * 10, 'TESTING OUT OF RANGE FOR ARGUMENT -F -- ', name, '#' * 10
+    command = generate_command(1, 2, 44100, 2*44100, [7], None, [])
+    print '  Calling bat with cmd:', " ".join(command)
+    launch_bat(command, args.verbose)
+    print ' ==> Pass'    
+    command = generate_command(1, 2, 44100, 2*44100, [2*44100/5+1], None, [])
+    print '  Calling bat with cmd:', " ".join(command)
+    launch_bat(command, args.verbose)
+    print ' ==> Pass'    
+
+
 # MAIN    
 if __name__ == '__main__':
     parse_command_line()
@@ -324,8 +337,10 @@ if __name__ == '__main__':
 
     # Let's test some expected fails        
     expected_fail = True
+    
     test_file_loopback(testset_hw_fail1, "ALSA hw with not suppored config")
     test_sine_loopback(testset_hw_fail2, "ALSA hw with not suppored config")
     test_file_loopback(testset_hw_fail3, "ALSA hw with not suppored config")
+    test_argument_F("");
         
     print '\nTESTS FINISHED'

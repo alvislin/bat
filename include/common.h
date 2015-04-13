@@ -125,7 +125,7 @@ struct analyze {
 	double *mag;
 };
 
-void close_file(void *);
+void close_file(FILE *);
 void destroy_mem(void *);
 
 void prepare_wav_info(struct wav_container *, struct bat *);

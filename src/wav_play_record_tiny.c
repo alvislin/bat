@@ -420,7 +420,7 @@ void *record_tinyalsa(struct bat *bat)
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
-	pthread_cleanup_push(close_file, file);
+	pthread_cleanup_push((void *)close_file, file);
 
 	ret = capture_sample(file, bat, header.format.channels,
 			header.format.sample_rate, format, period_size,
