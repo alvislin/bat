@@ -301,9 +301,11 @@ static int generate_input_data(struct snd_pcm_container sndpcm, int count,
 	return 0;
 }
 
-static int write_to_pcm(int size, int err,
-		const struct snd_pcm_container *sndpcm, int offset)
+static int write_to_pcm(int size, const struct snd_pcm_container *sndpcm,
+		int offset)
 {
+	int err;
+
 	while (size > 0) {
 		err = snd_pcm_writei(sndpcm->handle, sndpcm->buffer + offset,
 				size);
@@ -385,7 +387,7 @@ void *playback_alsa(struct bat *bat)
 				&& bat->periods_played >= bat->periods_total)
 			break;
 
-		ret = write_to_pcm(size, err, &sndpcm, offset);
+		ret = write_to_pcm(size, &sndpcm, offset);
 		if (ret == -1)
 			goto fail_exit;
 	}
