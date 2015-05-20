@@ -47,22 +47,19 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 
 	ret = fread(&riff_wave_header, sizeof(riff_wave_header), 1, bat->fp);
 	if (ret != 1) {
-		fprintf(stderr, "Error reading header of file %s!\n",
-				file);
+		loge(E_READFILE, "header of %s:%zd", file, ret);
 		return ret;
 	}
 	if ((riff_wave_header.magic != WAV_RIFF)
 			|| (riff_wave_header.type != WAV_WAVE)) {
-		fprintf(stderr, "Error: '%s' is not a riff/wave file!\n",
-				file);
+		loge(E_FILECONTENT, "%s is not a riff/wave file", file);
 		return -1;
 	}
 
 	do {
 		ret = fread(&chunk_header, sizeof(chunk_header), 1, bat->fp);
 		if (ret != 1) {
-			fprintf(stderr, "Error reading chunk of file %s!\n",
-					file);
+			loge(E_READFILE, "chunk of %s:%zd", file, ret);
 			return ret;
 		}
 
@@ -70,9 +67,8 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 		case WAV_FMT:
 			ret = fread(&chunk_fmt, sizeof(chunk_fmt), 1, bat->fp);
 			if (ret != 1) {
-				fprintf(stderr,
-					"Error reading chunk fmt of file %s!\n",
-					file);
+				loge(E_READFILE, "chunk fmt of %s:%zd",
+						file, ret);
 				return ret;
 			}
 			/* If the format header is larger, skip the rest */
@@ -81,9 +77,8 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 					chunk_header.length - sizeof(chunk_fmt)
 					, SEEK_CUR);
 				if (ret == -1) {
-					fprintf(stderr,
-						"Error skipping chunk fmt of file %s!\n",
-						file);
+					loge(E_SEEKFILE, "chunk fmt of %s:%zd",
+							file, ret);
 					return -1;
 				}
 			}
@@ -115,9 +110,8 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 			/* Unknown chunk, skip bytes */
 			ret = fseek(bat->fp, chunk_header.length, SEEK_CUR);
 			if (ret == -1) {
-				fprintf(stderr,
-					"Error skipping unknown chunk of file %s!\n",
-					file);
+				loge(E_SEEKFILE, "unknown chunk of %s:%zd",
+						file, ret);
 				return -1;
 			}
 		}

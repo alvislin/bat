@@ -68,9 +68,8 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 	/* Fill it in with default values. */
 	err = snd_pcm_hw_params_any(sndpcm->handle, params);
 	if (err < 0) {
-		fprintf(stderr,
-				"Broken configuration for %s PCM: no configurations available: %s\n",
-				snd_strerror(err), device_name);
+		loge(E_SETDEV S_DEFAULT, "%s: %s(%d)",
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
@@ -78,9 +77,8 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 	err = snd_pcm_hw_params_set_access(sndpcm->handle, params,
 			SND_PCM_ACCESS_RW_INTERLEAVED);
 	if (err < 0) {
-		fprintf(stderr,
-				"Access type not available for %s: %s\n",
-				device_name, snd_strerror(err));
+		loge(E_SETDEV S_ACCESS, "%s: %s(%d)",
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
@@ -99,14 +97,14 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 		format = SND_PCM_FORMAT_S32_LE;
 		break;
 	default:
-		fprintf(stderr, "error: format not supported!\n");
+		loge(E_PARAMS S_PCMFORMAT, "size=%d", bat->sample_size);
 		goto fail_exit;
 	}
 	err = snd_pcm_hw_params_set_format(sndpcm->handle, params, format);
 	if (err < 0) {
-		fprintf(stderr,
-				"Sample format not available for %s: %s\n",
-				device_name, snd_strerror(err));
+		loge(E_SETDEV S_PCMFORMAT, "%d %s: %s(%d)",
+				format,
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
@@ -114,9 +112,9 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 	err = snd_pcm_hw_params_set_channels(sndpcm->handle,
 			params, bat->channels);
 	if (err < 0) {
-		fprintf(stderr,
-				"Channels count (%i) not available for %s: %s\n",
-				bat->channels, device_name, snd_strerror(err));
+		loge(E_SETDEV S_CHANNELS, "%d %s: %s(%d)",
+				bat->channels,
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
@@ -126,24 +124,23 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 			params, &bat->rate,
 			0);
 	if (err < 0) {
-		fprintf(stderr,
-				"Rate %iHz not available for %s: %s\n",
-				bat->rate, device_name, snd_strerror(err));
+		loge(E_SETDEV S_SAMPLERATE, "%d %s: %s(%d)",
+				bat->rate,
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 	if ((float) rate * 1.05 < bat->rate
 			|| (float) rate * 0.95 > bat->rate) {
-		fprintf(stderr,
-				"Rate is not accurate (requested = %iHz, got = %iHz)\n",
+		loge(E_PARAMS S_SAMPLERATE, "requested %dHz, got %dHz",
 				rate, bat->rate);
 		goto fail_exit;
 	}
 
 	if (snd_pcm_hw_params_get_buffer_time_max(params,
 			&buffer_time, 0) < 0) {
-		fprintf(stderr,
-				"error: snd_pcm_hw_params_get_buffer_time_max returns %i\n",
-				err);
+		loge(E_GETDEV S_BUFFERTIME, "%d %s: %s(%d)",
+				buffer_time,
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
@@ -156,53 +153,55 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 	err = snd_pcm_hw_params_set_buffer_time_near(sndpcm->handle, params,
 			&buffer_time, 0);
 	if (err < 0) {
-		fprintf(stderr, "Unable to set buffer time %i: %s\n",
-				buffer_time, snd_strerror(err));
+		loge(E_SETDEV S_BUFFERTIME, "%d %s: %s(%d)",
+				buffer_time,
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
 	err = snd_pcm_hw_params_set_period_time_near(sndpcm->handle, params,
 			&period_time, 0);
 	if (err < 0) {
-		fprintf(stderr, "Unable to set period time %i: %s\n",
-				period_time, snd_strerror(err));
+		loge(E_SETDEV S_PERIODTIME, "%d %s: %s(%d)",
+				period_time,
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
 	/* Write the parameters to the driver */
 	if (snd_pcm_hw_params(sndpcm->handle, params) < 0) {
-		fprintf(stderr, "Unable to set hw params for %s: %s\n",
-				device_name, snd_strerror(err));
+		loge(E_SETDEV S_HWPARAMS, "%s: %s(%d)",
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
 	err = snd_pcm_hw_params_get_period_size(params,
 			&sndpcm->period_size, 0);
 	if (err < 0) {
-		fprintf(stderr, "Unable to get period size: %s\n",
-				snd_strerror(err));
+		loge(E_GETDEV S_PERIODSIZE, "%zd %s: %s(%d)",
+				sndpcm->period_size,
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
 	err = snd_pcm_hw_params_get_buffer_size(params, &sndpcm->buffer_size);
 	if (err < 0) {
-		fprintf(stderr, "Unable to get buffer size: %s\n",
-				snd_strerror(err));
+		loge(E_GETDEV S_BUFFERSIZE, "%zd %s: %s(%d)",
+				sndpcm->buffer_size,
+				device_name, snd_strerror(err), err);
 		goto fail_exit;
 	}
 
 	if (sndpcm->period_size == sndpcm->buffer_size) {
-		fprintf(stderr,
-				"error: can't use period equal to buffer size (%lu = %lu)!\n",
-				sndpcm->period_size, sndpcm->buffer_size);
+		loge(E_PARAMS, "can't use period equal to buffer size (%zd)",
+				sndpcm->period_size);
 		goto fail_exit;
 	}
 
 	sndpcm->sample_bits = snd_pcm_format_physical_width(format);
 	if (sndpcm->sample_bits < 0) {
-		fprintf(stderr,
-				"error: snd_pcm_format_physical_width returns %i\n",
-				err);
+		loge(E_PARAMS, "snd_pcm_format_physical_width: %zd",
+				sndpcm->sample_bits);
 		goto fail_exit;
 	}
 
@@ -212,8 +211,7 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 	sndpcm->period_bytes = sndpcm->period_size * sndpcm->frame_bits / 8;
 	sndpcm->buffer = (char *) malloc(sndpcm->period_bytes);
 	if (sndpcm->buffer == NULL) {
-		fprintf(stderr,
-				"error: allocation of memory buffer of snd pcm fails!\n");
+		loge(E_MALLOC, "size=%zd", sndpcm->period_bytes);
 		goto fail_exit;
 	}
 
@@ -251,8 +249,7 @@ static int generate_input_data(struct snd_pcm_container sndpcm, int count,
 			}
 			if (err < count - load) {
 				if (ferror(bat->fp)) {
-					fprintf(stderr,
-							"Error reading input file!\n");
+					loge(E_READFILE, "%d", err);
 					return -1;
 				}
 				load += err;
@@ -287,7 +284,7 @@ static int generate_input_data(struct snd_pcm_container sndpcm, int count,
 			max = INT32_MAX - 100;
 			break;
 		default:
-			fprintf(stderr, "Format not supported!\n");
+			loge(E_PARAMS S_PCMFORMAT, "size=%d", bat->sample_size);
 			return -1;
 		}
 
@@ -312,10 +309,11 @@ static int write_to_pcm(int size, const struct snd_pcm_container *sndpcm,
 		if (err == -EAGAIN || (err >= 0 && err < size)) {
 			snd_pcm_wait(sndpcm->handle, 500);
 		} else if (err == -EPIPE) {
-			fprintf(stderr, "Playback: Underrun occurred!\n");
+			loge(E_WRITEPCM S_UNDERRUN, "%s(%d)",
+					snd_strerror(err), err);
 			snd_pcm_prepare(sndpcm->handle);
 		} else if (err < 0) {
-			fprintf(stderr, "Write to pcm device fail!\n");
+			loge(E_WRITEPCM, "%s(%d)", snd_strerror(err), err);
 			return -1;
 		}
 
@@ -344,12 +342,11 @@ void *playback_alsa(struct bat *bat)
 		err = snd_pcm_open(&sndpcm.handle, bat->playback.device,
 				SND_PCM_STREAM_PLAYBACK, 0);
 		if (err < 0) {
-			fprintf(stderr, "Unable to open pcm device: %s!\n",
-					snd_strerror(err));
+			loge(E_OPENPCMP, "%s(%d)", snd_strerror(err), err);
 			goto fail_exit;
 		}
 	} else {
-		fprintf(stderr, "No audio device to open for playback!\n");
+		loge(E_NOPCMP, "exit");
 		goto fail_exit;
 	}
 
@@ -433,12 +430,11 @@ void *record_alsa(struct bat *bat)
 		err = snd_pcm_open(&sndpcm.handle, bat->capture.device,
 				SND_PCM_STREAM_CAPTURE, 0);
 		if (err < 0) {
-			fprintf(stderr, "Unable to open pcm device: %s!\n",
-					snd_strerror(err));
+			loge(E_OPENPCMC, "%s(%d)", snd_strerror(err), err);
 			goto fail_exit;
 		}
 	} else {
-		fprintf(stderr, "No audio device to open for capture!\n");
+		loge(E_OPENPCMC, "exit");
 		goto fail_exit;
 	}
 
@@ -451,7 +447,7 @@ void *record_alsa(struct bat *bat)
 	remove(bat->capture.file);
 	fp = fopen(bat->capture.file, "w+");
 	if (NULL == fp) {
-		fprintf(stderr, "Cannot create file: %s!\n", bat->capture.file);
+		loge(E_OPENFILEC, "%s", bat->capture.file);
 		goto fail_exit;
 	}
 
@@ -464,22 +460,19 @@ void *record_alsa(struct bat *bat)
 	if (fwrite(&wav.header, 1,
 			sizeof(wav.header), fp)
 			!= sizeof(wav.header)) {
-		fprintf(stderr,
-				"Error write wav file header!\n");
+		loge(E_WRITEFILE, "header %s(%d)", snd_strerror(err), err);
 		goto fail_exit;
 	}
 	if (fwrite(&wav.format, 1,
 			sizeof(wav.format), fp)
 			!= sizeof(wav.format)) {
-		fprintf(stderr,
-				"Error write wav file format!\n");
+		loge(E_WRITEFILE, "format %s(%d)", snd_strerror(err), err);
 		goto fail_exit;
 	}
 	if (fwrite(&wav.chunk, 1,
 			sizeof(wav.chunk), fp)
 			!= sizeof(wav.chunk)) {
-		fprintf(stderr,
-				"Error write wav file chunck!\n");
+		loge(E_WRITEFILE, "chunk %s(%d)", snd_strerror(err), err);
 		goto fail_exit;
 	}
 
@@ -498,11 +491,11 @@ void *record_alsa(struct bat *bat)
 				snd_pcm_wait(sndpcm.handle, 500);
 			} else if (err == -EPIPE) {
 				snd_pcm_prepare(sndpcm.handle);
-				fprintf(stderr,
-						"Capture: Overrun occurred!\n");
+				loge(E_READPCM S_OVERRUN, "%s(%d)",
+						snd_strerror(err), err);
 			} else if (err < 0) {
-				fprintf(stderr,
-						"Read from pcm device fail!\n");
+				loge(E_READPCM, "%s(%d)",
+						snd_strerror(err), err);
 				goto fail_exit;
 			}
 
@@ -513,8 +506,7 @@ void *record_alsa(struct bat *bat)
 		}
 
 		if (fwrite(sndpcm.buffer, 1, size, fp) != size) {
-			fprintf(stderr,
-					"Write to wav file fail!\n");
+			loge(E_WRITEFILE, "%s(%d)", snd_strerror(err), err);
 			goto fail_exit;
 		}
 		count -= size;

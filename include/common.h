@@ -32,13 +32,60 @@
 #define EONLYDC				101
 #define EBADPEAK			102
 
-#define DC_TRESHOLD			7.01
+#define DC_THRESHOLD			7.01
 
 #define FOUND_DC			(1<<1)
 #define FOUND_WRONG_PEAK	(1<<0)
 
 #define CHANNEL_MAX			2
 #define CHANNEL_MIN			1
+
+/* memory error message */
+#define E_MALLOC	"error: Allocate memory buffer: "
+/* file error message */
+#define E_OPENFILEP	"error: Open file for playback: "
+#define E_OPENFILEC	"error: Open file for capture: "
+#define E_READFILE	"error: Read file: "
+#define E_WRITEFILE	"error: Write file: "
+#define E_SEEKFILE	"error: Seek file: "
+#define E_FILECONTENT	"error: File content: "
+/* thread error message */
+#define E_NEWTHREADP	"error: Can't create playback thread: "
+#define E_NEWTHREADC	"error: Can't create capture thread: "
+#define E_JOINTHREADP	"error: Can't join playback thread: "
+#define E_JOINTHREADC	"error: Can't join capture thread: "
+#define E_EXITTHREADP	"error: Exit playback thread fail: "
+#define E_EXITTHREADC	"error: Exit capture thread fail: "
+/* pcm device error message */
+#define E_OPENPCMP	"error: Open PCM playback device: "
+#define E_OPENPCMC	"error: Open PCM capture device: "
+#define E_READPCM	"error: Read PCM device: "
+#define E_WRITEPCM	"error: Write PCM device: "
+#define E_NOPCMP	"error: No PCM device for playback: "
+#define E_NOPCMC	"error: No PCM device for capture: "
+#define E_SETDEV	"error: Set parameter to device: "
+#define E_GETDEV	"error: Get parameter from device: "
+/* parameter error message */
+#define E_PARAMS	"error: Invalid parameter: "
+/* error type string */
+#define S_DEFAULT	"default params: "
+#define S_HWPARAMS	"hw params: "
+#define S_CHANNELS	"channel number: "
+#define S_PCMFORMAT	"PCM format: "
+#define S_ACCESS	"access type: "
+#define S_SAMPLERATE	"sample rate: "
+#define S_BUFFERTIME	"buffer time: "
+#define S_BUFFERSIZE	"buffer size: "
+#define S_PERIODTIME	"period time: "
+#define S_PERIODSIZE	"period size: "
+#define S_UNDERRUN	"underrun: "
+#define S_OVERRUN	"overrun: "
+
+#define loge(key, ...)	do {		\
+	fprintf(stderr, key);		\
+	fprintf(stderr, ##__VA_ARGS__);	\
+	fprintf(stderr, "\n");		\
+} while (0)
 
 struct wav_header {
 	unsigned int magic; /* 'RIFF' */

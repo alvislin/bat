@@ -45,7 +45,7 @@ static void get_duration(struct bat *bat)
 	else if (*ptri == 0)
 		bat->frames = duration_i;
 	else {
-		fprintf(stderr, "error: -n argument is not valid\n");
+		loge(E_PARAMS, "for option -n");
 		exit(EXIT_FAILURE);
 	}
 }
@@ -84,10 +84,8 @@ static int thread_wait_completion(struct bat *bat, pthread_t id, int **val)
 	int err;
 
 	err = pthread_join(id, (void **) val);
-	if (err) {
-		fprintf(stderr, "error: can't join thread %d\n", err);
+	if (err)
 		pthread_cancel(id);
-	}
 
 	return err;
 }
@@ -103,7 +101,7 @@ static void test_loopback(struct bat *bat)
 	ret = pthread_create(&playback_id, NULL,
 			(void *) bat->playback.fct, bat);
 	if (ret != 0) {
-		fprintf(stderr, "error: failed to create playback thread\n");
+		loge(E_NEWTHREADP, "%d", ret);
 		exit(EXIT_FAILURE);
 	}
 
@@ -114,7 +112,7 @@ static void test_loopback(struct bat *bat)
 	/* start capture */
 	ret = pthread_create(&capture_id, NULL, (void *) bat->capture.fct, bat);
 	if (ret != 0) {
-		fprintf(stderr, "error: failed to create capture thread\n");
+		loge(E_NEWTHREADC, "%d", ret);
 		pthread_cancel(playback_id);
 		exit(EXIT_FAILURE);
 	}
@@ -122,15 +120,14 @@ static void test_loopback(struct bat *bat)
 	/* wait for playback to complete */
 	ret = thread_wait_completion(bat, playback_id, &thread_result_playback);
 	if (ret != 0) {
-		fprintf(stderr, "error: can't join playback thread\n");
+		loge(E_JOINTHREADP, "%d", ret);
 		pthread_cancel(capture_id);
 		exit(EXIT_FAILURE);
 	}
 
 	/* check playback status */
 	if (*thread_result_playback != 0) {
-		fprintf(stderr, "error: playback failed %d\n",
-				*thread_result_playback);
+		loge(E_EXITTHREADP, "%d", *thread_result_playback);
 		pthread_cancel(capture_id);
 		exit(EXIT_FAILURE);
 	} else
@@ -140,14 +137,13 @@ static void test_loopback(struct bat *bat)
 	pthread_cancel(capture_id);
 	ret = thread_wait_completion(bat, capture_id, &thread_result_capture);
 	if (ret != 0) {
-		fprintf(stderr, "error: can't join capture thread\n");
+		loge(E_JOINTHREADC, "%d", ret);
 		exit(EXIT_FAILURE);
 	}
 
 	/* check capture status */
 	if (*thread_result_capture != 0) {
-		fprintf(stderr, "error: capture failed %d\n",
-				*thread_result_capture);
+		loge(E_EXITTHREADC, "%d", *thread_result_capture);
 		exit(EXIT_FAILURE);
 	} else
 		printf("Capture completed.\n");
@@ -164,20 +160,20 @@ static void test_playback(struct bat *bat)
 	ret = pthread_create(&playback_id, NULL,
 			(void *) bat->playback.fct, bat);
 	if (ret != 0) {
-		fprintf(stderr, "error: failed to create playback thread\n");
+		loge(E_NEWTHREADP, "%d", ret);
 		exit(EXIT_FAILURE);
 	}
 
 	/* wait for playback to complete */
 	ret = thread_wait_completion(bat, playback_id, &thread_result);
 	if (ret != 0) {
-		fprintf(stderr, "error: can't join playback thread\n");
+		loge(E_JOINTHREADP, "%d", ret);
 		exit(EXIT_FAILURE);
 	}
 
 	/* check playback status */
 	if (*thread_result != 0) {
-		fprintf(stderr, "error: playback failed %d\n", *thread_result);
+		loge(E_EXITTHREADP, "%d", *thread_result);
 		exit(EXIT_FAILURE);
 	} else
 		printf("Playback completed.\n");
@@ -194,7 +190,7 @@ static void test_capture(struct bat *bat)
 	/* start capture */
 	ret = pthread_create(&capture_id, NULL, (void *) bat->capture.fct, bat);
 	if (ret != 0) {
-		fprintf(stderr, "error: failed to create capture thread\n");
+		loge(E_NEWTHREADC, "%d", ret);
 		exit(EXIT_FAILURE);
 	}
 
@@ -203,13 +199,13 @@ static void test_capture(struct bat *bat)
 	/* wait for capture to complete */
 	ret = thread_wait_completion(bat, capture_id, &thread_result);
 	if (ret != 0) {
-		fprintf(stderr, "error: can't join capture thread\n");
+		loge(E_JOINTHREADC, "%d", ret);
 		exit(EXIT_FAILURE);
 	}
 
 	/* check playback status */
 	if (*thread_result != 0) {
-		fprintf(stderr, "error: capture failed %d\n", *thread_result);
+		loge(E_EXITTHREADC, "%d", *thread_result);
 		exit(EXIT_FAILURE);
 	} else
 		printf("Capture completed.\n");
@@ -318,8 +314,8 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 			bat->capture.fct = &record_tinyalsa;
 			bat->tinyalsa = true;
 #else
-			fprintf(stderr, "error: tinyalsa not installed\n");
-			exit(-EINVAL);
+			loge(E_PARAMS, "tinyalsa not installed");
+			exit(EXIT_FAILURE);
 #endif
 			break;
 		case 'h':
@@ -332,32 +328,35 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 static void validate_options(struct bat *bat)
 {
 	int c;
+	float freq_low, freq_high;
 
 	/* check we have an input file for local mode */
 	if ((bat->local == true) && (bat->capture.file == NULL)) {
-		fprintf(stderr, "error: no input file for local testing\n");
+		loge(E_PARAMS, "no input file for local testing");
 		exit(EXIT_FAILURE);
 	}
 
 	/* check supported channels */
 	if (bat->channels > CHANNEL_MAX || bat->channels < CHANNEL_MIN) {
-		fprintf(stderr, "error: %d channels not supported\n",
-				bat->channels);
+		loge(E_PARAMS, "%d channels not supported", bat->channels);
 		exit(EXIT_FAILURE);
 	}
 
 	/* check single ended is in either playback or capture - not both */
 	if (bat->playback.single && bat->capture.single) {
-		fprintf(stderr, "error: single ended mode is simplex\n");
+		loge(E_PARAMS, "single ended mode is simplex");
 		exit(EXIT_FAILURE);
 	}
 
 	/* check sine wave frequency range*/
+	freq_low = DC_THRESHOLD;
+	freq_high = bat->rate * 2 / 5;
 	for (c = 0; c < bat->channels; c++) {
-		if (bat->target_freq[c] < DC_TRESHOLD
-				|| bat->target_freq[c] > 2*bat->rate/5) {
-			fprintf(stderr, "error: sine wave frequency is out ");
-			fprintf(stderr, "of range\n");
+		if (bat->target_freq[c] < freq_low
+				|| bat->target_freq[c] > freq_high) {
+			loge(E_PARAMS,
+				"sine wave frequency out of range (%.1f, %.1f)",
+				freq_low, freq_high);
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -413,8 +412,7 @@ static void bat_init(struct bat *bat)
 	} else {
 		bat->fp = fopen(bat->playback.file, "rb");
 		if (bat->fp == NULL) {
-			fprintf(stderr, "error: can't open %s %d\n",
-					bat->playback.file, -errno);
+			loge(E_OPENFILEP, "%s %d", bat->playback.file, -errno);
 			exit(EXIT_FAILURE);
 		}
 		ret = read_wav_header(bat, bat->playback.file, false);
@@ -443,7 +441,7 @@ static void bat_init(struct bat *bat)
 		bat->convert_sample_to_double = convert_int32_to_double;
 		break;
 	default:
-		fprintf(stderr, "error: sample size not supported!\n");
+		loge(E_PARAMS S_PCMFORMAT, "%d", bat->sample_size);
 		exit(EXIT_FAILURE);
 		break;
 	}

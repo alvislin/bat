@@ -56,7 +56,7 @@ int check_peak(struct bat *bat, struct analyze *a, int end, int peak, float hz,
 			10.0 * log10(p / mean), (start + 1) * hz,
 			(end + 1) * hz);
 
-	if (hz_peak < DC_TRESHOLD) {
+	if (hz_peak < DC_THRESHOLD) {
 		fprintf(stdout,
 				" WARNING: Found low peak %2.2f Hz, very close to DC\n",
 				hz_peak);
@@ -247,7 +247,7 @@ int analyze_capture(struct bat *bat)
 
 	bat->fp = fopen(bat->capture.file, "rb");
 	if (bat->fp == NULL) {
-		fprintf(stderr, "failed to open %s!\n", bat->capture.file);
+		loge(E_OPENFILEC, "%s", bat->capture.file);
 		return -ENOENT;
 	}
 

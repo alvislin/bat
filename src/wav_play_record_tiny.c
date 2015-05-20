@@ -71,14 +71,14 @@ static int check_param(struct pcm_params *params, unsigned int param,
 
 	min = pcm_params_get_min(params, param);
 	if (value < min) {
-		fprintf(stderr, "%s is %u%s, device only supports >= %u%s!\n",
+		loge(E_PARAMS, "%s is %u%s, device only supports >= %u%s!",
 			param_name, value, param_unit, min, param_unit);
 		is_within_bounds = 0;
 	}
 
 	max = pcm_params_get_max(params, param);
 	if (value > max) {
-		fprintf(stderr, "%s is %u%s, device only supports <= %u%s!\n",
+		loge(E_PARAMS, "%s is %u%s, device only supports <= %u%s!",
 			param_name, value, param_unit, max, param_unit);
 		is_within_bounds = 0;
 	}
@@ -115,7 +115,7 @@ static int generate_input_data(char *buffer, int size, struct bat *bat)
 			max = INT32_MAX-100;
 			break;
 		default:
-			fprintf(stderr, "Format not supported!\n");
+			loge(E_PARAMS S_PCMFORMAT, "size=%d", bat->sample_size);
 			return -1;
 		}
 
@@ -143,7 +143,7 @@ static int sample_is_playable(unsigned int card, unsigned int device,
 
 	params = pcm_params_get(card, device, PCM_OUT);
 	if (params == NULL) {
-		fprintf(stderr, "Unable to open PCM device %u!\n", device);
+		loge(E_OPENPCMP, "%u", device);
 		return 0;
 	}
 
@@ -190,7 +190,7 @@ static unsigned int play_sample(unsigned int card, unsigned int device,
 		config.format = PCM_FORMAT_S32_LE;
 		break;
 	default:
-		fprintf(stderr, "Not supported format!\n");
+		loge(E_PARAMS S_PCMFORMAT, "size=%d", bat->sample_size);
 		return 0;
 	}
 	config.start_threshold = 0;
@@ -204,15 +204,14 @@ static unsigned int play_sample(unsigned int card, unsigned int device,
 
 	pcm = pcm_open(card, device, PCM_OUT, &config);
 	if (!pcm || !pcm_is_ready(pcm)) {
-		fprintf(stderr, "Unable to open PCM device %u (%s)!\n",
-				device, pcm_get_error(pcm));
+		loge(E_OPENPCMP, "%u: %s", device, pcm_get_error(pcm));
 		return 0;
 	}
 
 	size = pcm_frames_to_bytes(pcm, pcm_get_buffer_size(pcm));
 	buffer = malloc(size);
 	if (!buffer) {
-		fprintf(stderr, "Unable to allocate %d bytes!\n", size);
+		loge(E_MALLOC, "%d bytes", size);
 		pcm_close(pcm);
 		return 0;
 	}
@@ -227,7 +226,7 @@ static unsigned int play_sample(unsigned int card, unsigned int device,
 		num_read = generate_input_data(buffer, size, bat);
 		if (num_read > 0) {
 			if (pcm_write(pcm, buffer, num_read)) {
-				fprintf(stderr, "Error playing sample!\n");
+				loge(E_WRITEPCM, "%d bytes", num_read);
 				break;
 			}
 		}
@@ -298,8 +297,7 @@ static unsigned int capture_sample(FILE *file, struct bat *bat,
 	pcm = pcm_open(bat->capture.card_tiny, bat->capture.device_tiny,
 			PCM_IN, &config);
 	if (!pcm || !pcm_is_ready(pcm)) {
-		fprintf(stderr, "Unable to open PCM device (%s)!\n",
-				pcm_get_error(pcm));
+		loge(E_OPENPCMC, "%s", pcm_get_error(pcm));
 		return 0;
 	}
 	pthread_cleanup_push(close_handle, pcm);
@@ -308,7 +306,7 @@ static unsigned int capture_sample(FILE *file, struct bat *bat,
 	printf("Capture: size = %i\n", size);
 	buffer = malloc(size);
 	if (!buffer) {
-		fprintf(stderr, "Unable to allocate %d bytes!\n", size);
+		loge(E_MALLOC, "%d bytes", size);
 		pcm_close(pcm);
 		return 0;
 	}
@@ -320,7 +318,7 @@ static unsigned int capture_sample(FILE *file, struct bat *bat,
 	while (bytes_read < bat->frames*bat->frame_size && capturing &&
 			!pcm_read(pcm, buffer, size)) {
 		if (fwrite(buffer, 1, size, file) != size) {
-			fprintf(stderr, "Error capturing sample!\n");
+			loge(E_WRITEPCM, "break");
 			break;
 		}
 		bytes_read += size;
@@ -367,7 +365,7 @@ void *record_tinyalsa(struct bat *bat)
 		format = PCM_FORMAT_S32_LE;
 		break;
 	default:
-		fprintf(stderr, "Unsupported format!\n");
+		loge(E_PARAMS S_PCMFORMAT, "size=%d", bat->sample_size);
 		goto fail_exit;
 	}
 
@@ -377,8 +375,7 @@ void *record_tinyalsa(struct bat *bat)
 	remove(bat->capture.file);
 	file = fopen(bat->capture.file, "wb");
 	if (!file) {
-		fprintf(stderr, "Cannot create file: %s!\n",
-				bat->capture.file);
+		loge(E_OPENFILEC, "%s", bat->capture.file);
 		goto fail_exit;
 	}
 
@@ -399,18 +396,18 @@ void *record_tinyalsa(struct bat *bat)
 
 	if (fwrite(&header.header, 1, sizeof(header.header),
 			file) != sizeof(header.header)) {
-		fprintf(stderr, "Error write wav file header!\n");
+		loge(E_WRITEFILE, "header header");
 		goto fail_exit;
 	}
 	if (fwrite(&header.format, 1, sizeof(header.format),
 			file) != sizeof(header.format)) {
-		fprintf(stderr, "Error write wav file header!\n");
+		loge(E_WRITEFILE, "header format");
 		goto fail_exit;
 
 	}
 	if (fwrite(&header.chunk, 1, sizeof(header.chunk),
 			file) != sizeof(header.chunk)) {
-		fprintf(stderr, "Error write wav file header!\n");
+		loge(E_WRITEFILE, "header chunk");
 		goto fail_exit;
 	}
 
