@@ -1,6 +1,6 @@
 AC_PREREQ([2.68])
 
-AC_INIT([bat],[m4_esyscmd(./git-version-gen .tarball-version)],[liam.r.girdwood (at) intel (dot) com])
+AC_INIT([bat],[m4_esyscmd_s(cat ./version)],[liam.r.girdwood (at) intel (dot) com])
 
 AC_CONFIG_MACRO_DIR([m4])
 
