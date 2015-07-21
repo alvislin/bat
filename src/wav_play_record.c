@@ -198,12 +198,12 @@ static int set_snd_pcm_params(struct bat *bat, struct snd_pcm_container *sndpcm)
 		goto fail_exit;
 	}
 
-	sndpcm->sample_bits = snd_pcm_format_physical_width(format);
-	if (sndpcm->sample_bits < 0) {
-		loge(E_PARAMS, "snd_pcm_format_physical_width: %zd",
-				sndpcm->sample_bits);
+	err = snd_pcm_format_physical_width(format);
+	if (err < 0) {
+		loge(E_PARAMS, "snd_pcm_format_physical_width: %d", err);
 		goto fail_exit;
 	}
+	sndpcm->sample_bits = err;
 
 	sndpcm->frame_bits = sndpcm->sample_bits * bat->channels;
 
