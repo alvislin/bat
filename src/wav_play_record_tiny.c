@@ -23,6 +23,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <math.h>
+#include <errno.h>
 
 #include <tinyalsa/asoundlib.h>
 
@@ -67,23 +68,23 @@ static int check_param(struct pcm_params *params, unsigned int param,
 {
 	unsigned int min;
 	unsigned int max;
-	int is_within_bounds = 1;
+	int ret = 0;
 
 	min = pcm_params_get_min(params, param);
 	if (value < min) {
 		loge(E_PARAMS, "%s is %u%s, device only supports >= %u%s!",
 			param_name, value, param_unit, min, param_unit);
-		is_within_bounds = 0;
+		ret = -EINVAL;
 	}
 
 	max = pcm_params_get_max(params, param);
 	if (value > max) {
 		loge(E_PARAMS, "%s is %u%s, device only supports <= %u%s!",
 			param_name, value, param_unit, max, param_unit);
-		is_within_bounds = 0;
+		ret = -EINVAL;
 	}
 
-	return is_within_bounds;
+	return ret;
 }
 
 static int generate_input_data(char *buffer, int size, struct bat *bat)
@@ -130,90 +131,98 @@ static int generate_input_data(char *buffer, int size, struct bat *bat)
 	return num_read;
 
 }
+
+/**
+ * Sample size to format
+ */
+static enum pcm_format sample_size_to_format(int sample_size)
+{
+	switch (sample_size) {
+	case 1:
+		return PCM_FORMAT_S8;
+	case 2:
+		return PCM_FORMAT_S16_LE;
+	case 4:
+		return PCM_FORMAT_S32_LE;
+	default:
+		loge(E_PARAMS S_PCMFORMAT, "size = %d", sample_size);
+		return PCM_FORMAT_MAX;
+	}
+}
+
 /**
  * Check all parameters
  */
-static int sample_is_playable(unsigned int card, unsigned int device,
-		unsigned int channels, unsigned int rate,
-		unsigned int bits, unsigned int period_size,
-		unsigned int period_count)
+static int check_playback_params(struct bat *bat,
+		struct pcm_config *config)
 {
 	struct pcm_params *params;
-	int can_play;
+	unsigned int card = bat->playback.card_tiny;
+	unsigned int device = bat->playback.device_tiny;
+	int ret = 0;
 
 	params = pcm_params_get(card, device, PCM_OUT);
 	if (params == NULL) {
-		loge(E_OPENPCMP, "%u", device);
-		return 0;
+		loge(E_GETDEV, "%u", device);
+		return -EINVAL;
 	}
 
-	can_play = check_param(params, PCM_PARAM_RATE, rate,
-			"Sample rate", "Hz");
-	can_play &= check_param(params, PCM_PARAM_CHANNELS, channels,
-			"Sample", " channels");
-	can_play &= check_param(params, PCM_PARAM_SAMPLE_BITS, bits,
-			"Bitrate", " bits");
-	can_play &= check_param(params, PCM_PARAM_PERIOD_SIZE, period_size,
-			"Period size", "Hz");
-	can_play &= check_param(params, PCM_PARAM_PERIODS, period_count,
-			"Period count", "Hz");
+	ret = check_param(params, PCM_PARAM_RATE,
+			config->rate, "Sample rate", "Hz");
+	if (ret < 0)
+		goto exit;
+	ret = check_param(params, PCM_PARAM_CHANNELS,
+			config->channels, "Sample", " channels");
+	if (ret < 0)
+		goto exit;
+	ret = check_param(params, PCM_PARAM_SAMPLE_BITS,
+			bat->sample_size * 8, "Bitrate", " bits");
+	if (ret < 0)
+		goto exit;
+	ret = check_param(params, PCM_PARAM_PERIOD_SIZE,
+			config->period_size, "Period size", "Hz");
+	if (ret < 0)
+		goto exit;
+	ret = check_param(params, PCM_PARAM_PERIODS,
+			config->period_count, "Period count", "Hz");
+	if (ret < 0)
+		goto exit;
 
+exit:
 	pcm_params_free(params);
 
-	return can_play;
+	return ret;
 }
 /**
  * Play sample
  */
-static unsigned int play_sample(unsigned int card, unsigned int device,
-		struct bat *bat, unsigned int period_size,
-		unsigned int period_count)
+static int play_sample(struct bat *bat, struct pcm_config *config)
 {
-	struct pcm_config config;
-	struct pcm *pcm;
-	char *buffer;
+	struct pcm *pcm = NULL;
+	char *buffer = NULL;
+	unsigned int card = bat->playback.card_tiny;
+	unsigned int device = bat->playback.device_tiny;
 	int size;
 	int num_read;
+	int ret = 0;
 
-	config.channels = bat->channels;
-	config.rate = bat->rate;
-	config.period_size = period_size;
-	config.period_count = period_count;
-	switch (bat->sample_size) {
-	case 1:
-		config.format = PCM_FORMAT_S8;
-		break;
-	case 2:
-		config.format = PCM_FORMAT_S16_LE;
-		break;
-	case 4:
-		config.format = PCM_FORMAT_S32_LE;
-		break;
-	default:
-		loge(E_PARAMS S_PCMFORMAT, "size=%d", bat->sample_size);
-		return 0;
-	}
-	config.start_threshold = 0;
-	config.stop_threshold = 0;
-	config.silence_threshold = 0;
+	ret = check_playback_params(bat, config);
+	if (ret < 0)
+		goto exit;
 
-	if (!sample_is_playable(card, device, bat->channels, bat->rate,
-			bat->sample_size * 8, period_size, period_count))
-		return 0;
-
-
-	pcm = pcm_open(card, device, PCM_OUT, &config);
+	pcm = pcm_open(card, device, PCM_OUT, config);
 	if (!pcm || !pcm_is_ready(pcm)) {
 		loge(E_OPENPCMP, "%u: %s", device, pcm_get_error(pcm));
-		return 0;
+		ret = -ENODEV;
+		goto exit;
 	}
 
 	size = pcm_frames_to_bytes(pcm, pcm_get_buffer_size(pcm));
 	buffer = malloc(size);
 	if (!buffer) {
 		loge(E_MALLOC, "%d bytes", size);
-		pcm_close(pcm);
-		return 0;
+		ret = -ENOMEM;
+		goto exit;
 	}
 
 	printf("Playing sample: %u ch, %u hz, %u bits\n", bat->channels,
@@ -235,9 +244,12 @@ static unsigned int play_sample(unsigned int card, unsigned int device,
 			break;
 	} while (!closed && num_read > 0);
 
-	free(buffer);
-	pcm_close(pcm);
-	return 1;
+exit:
+	if (buffer)
+		free(buffer);
+	if (pcm)
+		pcm_close(pcm);
+	return ret;
 }
 
 /**
@@ -245,11 +257,25 @@ static unsigned int play_sample(unsigned int card, unsigned int device,
  */
 void *playback_tinyalsa(struct bat *bat)
 {
-	unsigned int period_size = 1024;
-	unsigned int period_count = 4;
-	unsigned int ret;
+	struct pcm_config config;
+	enum pcm_format format;
+	int ret = 0;
 
 	retval_play = 0;
+
+	config.channels = bat->channels;
+	config.rate = bat->rate;
+	config.period_size = 1024;
+	config.period_count = 4;
+	format = sample_size_to_format(bat->sample_size);
+	if (format == PCM_FORMAT_MAX) {
+		retval_play = 1;
+		goto exit;
+	}
+	config.format = format;
+	config.start_threshold = 0;
+	config.stop_threshold = 0;
+	config.silence_threshold = 0;
 
 	printf("Entering playback thread (tinyalsa).\n");
 
@@ -262,40 +288,28 @@ void *playback_tinyalsa(struct bat *bat)
 				bat->playback.file);
 	}
 
-	ret = play_sample(bat->playback.card_tiny, bat->playback.device_tiny,
-			bat, period_size, period_count);
-	if (ret == 0)
+	ret = play_sample(bat, &config);
+	if (ret < 0)
 		retval_play = 1;
 
+exit:
 	if (bat->fp)
 		fclose(bat->fp);
 	pthread_exit(&retval_play);
 }
 
 static unsigned int capture_sample(FILE *file, struct bat *bat,
-		unsigned int channels, unsigned int rate,
-		enum pcm_format format, unsigned int period_size,
-		unsigned int period_count)
+		struct pcm_config *config)
 {
-	struct pcm_config config;
 	struct pcm *pcm;
 	char *buffer;
 	unsigned int size;
 	unsigned int bytes_read = 0;
 
-	config.channels = channels;
-	config.rate = rate;
-	config.period_size = period_size;
-	config.period_count = period_count;
-	config.format = format;
-	config.start_threshold = 0;
-	config.stop_threshold = 0;
-	config.silence_threshold = 0;
-
-	printf("rate: %i, format: %i\n", config.rate, config.format);
+	printf("rate: %i, format: %i\n", config->rate, config->format);
 
 	pcm = pcm_open(bat->capture.card_tiny, bat->capture.device_tiny,
-			PCM_IN, &config);
+			PCM_IN, config);
 	if (!pcm || !pcm_is_ready(pcm)) {
 		loge(E_OPENPCMC, "%s", pcm_get_error(pcm));
 		return 0;
@@ -312,8 +326,9 @@ static unsigned int capture_sample(FILE *file, struct bat *bat,
 	}
 	pthread_cleanup_push(destroy_mem, buffer);
 
-	printf("Capturing sample: %u ch, %u hz, %u bit\n", channels, rate,
-			pcm_format_to_bits(format));
+	printf("Capturing sample: %u ch, %u hz, %u bit\n",
+			config->channels, config->rate,
+			pcm_format_to_bits(config->format));
 
 	while (bytes_read < bat->frames*bat->frame_size && capturing &&
 			!pcm_read(pcm, buffer, size)) {
@@ -348,30 +363,28 @@ static unsigned int capture_sample(FILE *file, struct bat *bat,
 void *record_tinyalsa(struct bat *bat)
 {
 	FILE *file = NULL;
+	struct pcm_config config;
+	enum pcm_format format;
 	struct wav_container header;
-	unsigned int period_size = 1024;
-	unsigned int period_count = 4;
-	enum pcm_format format = 0;
-	unsigned int ret;
+	unsigned int frames_read = 0;
 
-	switch (bat->sample_size) {
-	case 1:
-		format = PCM_FORMAT_S8;
-		break;
-	case 2:
-		format = PCM_FORMAT_S16_LE;
-		break;
-	case 4:
-		format = PCM_FORMAT_S32_LE;
-		break;
-	default:
-		loge(E_PARAMS S_PCMFORMAT, "size=%d", bat->sample_size);
+	/* init config */
+	config.channels = bat->channels;
+	config.rate = bat->rate;
+	config.period_size = 1024;
+	config.period_count = 4;
+	format = sample_size_to_format(bat->sample_size);
+	if (format == PCM_FORMAT_MAX)
 		goto fail_exit;
-	}
+	config.format = format;
+	config.start_threshold = 0;
+	config.stop_threshold = 0;
+	config.silence_threshold = 0;
 
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	printf("Entering capture thread (tinyalsa).\n");
 
+	/* init wav header */
 	remove(bat->capture.file);
 	file = fopen(bat->capture.file, "wb");
 	if (!file) {
@@ -419,14 +432,12 @@ void *record_tinyalsa(struct bat *bat)
 
 	pthread_cleanup_push((void *)close_file, file);
 
-	ret = capture_sample(file, bat, header.format.channels,
-			header.format.sample_rate, format, period_size,
-			period_count);
+	frames_read = capture_sample(file, bat, &config);
 
 	/* Normally we will never reach this part of code (unless error in
 	 * previous call) (before fail_exit) as this thread will be cancelled
 	 *  by end of play thread. Except in single line mode. */
-	if (ret == 0)
+	if (frames_read == 0)
 		goto fail_exit;
 
 	/* Normally we will never reach this part of code (before fail_exit) as
