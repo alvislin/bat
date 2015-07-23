@@ -248,27 +248,30 @@ int analyze_capture(struct bat *bat)
 	bat->fp = fopen(bat->capture.file, "rb");
 	if (bat->fp == NULL) {
 		loge(E_OPENFILEC, "%s", bat->capture.file);
-		return -ENOENT;
+		ret = -ENOENT;
+		goto exit;
 	}
 
 	bat->buf = malloc(bat->frames * bat->frame_size);
-	if (bat->buf == NULL)
-		return -ENOMEM;
+	if (bat->buf == NULL) {
+		ret = -ENOMEM;
+		goto exit;
+	}
 
 	/* Skip header */
-	ret = read_wav_header(bat, bat->capture.file, true);
+	ret = read_wav_header(bat, bat->capture.file, bat->fp, true);
 	if (ret != 0)
-		return ret;
+		goto exit;
 
 	items = fread(bat->buf, bat->frame_size, bat->frames, bat->fp);
 	if (items != bat->frames) {
-		free(bat->buf);
-		return -EIO;
+		ret = -EIO;
+		goto exit;
 	}
 
 	ret = reorder_data(bat);
 	if (ret != 0)
-		return ret;
+		goto exit;
 
 	for (c = 0; c < bat->channels; c++) {
 		struct analyze a;
@@ -280,6 +283,10 @@ int analyze_capture(struct bat *bat)
 				/ bat->channels;
 		ret = find_and_check_harmonics(bat, &a, c);
 	}
-
+exit:
+	if (bat->buf)
+		free(bat->buf);
+	if (bat->fp)
+		fclose(bat->fp);
 	return ret;
 }

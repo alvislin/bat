@@ -37,7 +37,7 @@ void destroy_mem(void *block)
 	free(block);
 }
 
-int read_wav_header(struct bat *bat, char *file, bool skip)
+int read_wav_header(struct bat *bat, char *file, FILE *fp, bool skip)
 {
 	struct wav_header riff_wave_header;
 	struct wav_chunk_header chunk_header;
@@ -45,7 +45,7 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 	int more_chunks = 1;
 	size_t ret;
 
-	ret = fread(&riff_wave_header, sizeof(riff_wave_header), 1, bat->fp);
+	ret = fread(&riff_wave_header, sizeof(riff_wave_header), 1, fp);
 	if (ret != 1) {
 		loge(E_READFILE, "header of %s:%zd", file, ret);
 		return ret;
@@ -57,7 +57,7 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 	}
 
 	do {
-		ret = fread(&chunk_header, sizeof(chunk_header), 1, bat->fp);
+		ret = fread(&chunk_header, sizeof(chunk_header), 1, fp);
 		if (ret != 1) {
 			loge(E_READFILE, "chunk of %s:%zd", file, ret);
 			return ret;
@@ -65,7 +65,7 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 
 		switch (chunk_header.type) {
 		case WAV_FMT:
-			ret = fread(&chunk_fmt, sizeof(chunk_fmt), 1, bat->fp);
+			ret = fread(&chunk_fmt, sizeof(chunk_fmt), 1, fp);
 			if (ret != 1) {
 				loge(E_READFILE, "chunk fmt of %s:%zd",
 						file, ret);
@@ -73,7 +73,7 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 			}
 			/* If the format header is larger, skip the rest */
 			if (chunk_header.length > sizeof(chunk_fmt)) {
-				ret = fseek(bat->fp,
+				ret = fseek(fp,
 					chunk_header.length - sizeof(chunk_fmt)
 					, SEEK_CUR);
 				if (ret == -1) {
@@ -86,6 +86,17 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 				bat->channels = chunk_fmt.channels;
 				bat->rate = chunk_fmt.sample_rate;
 				bat->sample_size = chunk_fmt.sample_length / 8;
+				switch (bat->sample_size) {
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+					break;
+				default:
+					loge(E_PARAMS S_PCMFORMAT, "size=%d",
+							bat->sample_size);
+					return -1;
+				}
 				bat->frame_size = chunk_fmt.blocks_align;
 			}
 
@@ -108,7 +119,7 @@ int read_wav_header(struct bat *bat, char *file, bool skip)
 			break;
 		default:
 			/* Unknown chunk, skip bytes */
-			ret = fseek(bat->fp, chunk_header.length, SEEK_CUR);
+			ret = fseek(fp, chunk_header.length, SEEK_CUR);
 			if (ret == -1) {
 				loge(E_SEEKFILE, "unknown chunk of %s:%zd",
 						file, ret);

@@ -333,7 +333,6 @@ void *playback_alsa(struct bat *bat)
 	int err = 0;
 	struct snd_pcm_container sndpcm;
 	int size, offset, count;
-	int ret;
 
 	printf("Entering playback thread (ALSA).\n");
 
@@ -360,6 +359,11 @@ void *playback_alsa(struct bat *bat)
 				printf(" endlessly\n") : printf("\n");
 	} else {
 		printf("Playing input audio file: %s\n", bat->playback.file);
+		bat->fp = fopen(bat->playback.file, "rb");
+		if (bat->fp == NULL) {
+			loge(E_OPENFILEC, "%s", bat->playback.file);
+			goto fail_exit;
+		}
 	}
 
 	count = sndpcm.period_bytes; /* playback buffer size */
@@ -371,10 +375,10 @@ void *playback_alsa(struct bat *bat)
 		offset = 0;
 		size = count * 8 / sndpcm.frame_bits;
 
-		ret = generate_input_data(sndpcm, count, bat);
-		if (ret < 0)
+		err = generate_input_data(sndpcm, count, bat);
+		if (err < 0)
 			goto fail_exit;
-		else if (ret > 0)
+		else if (err > 0)
 			break;
 #ifdef DEBUG
 		fwrite(sndpcm.buffer, count * 8 / sndpcm.frame_bits, 4,
@@ -384,8 +388,8 @@ void *playback_alsa(struct bat *bat)
 				&& bat->periods_played >= bat->periods_total)
 			break;
 
-		ret = write_to_pcm(size, &sndpcm, offset);
-		if (ret == -1)
+		err = write_to_pcm(size, &sndpcm, offset);
+		if (err == -1)
 			goto fail_exit;
 	}
 #ifdef DEBUG

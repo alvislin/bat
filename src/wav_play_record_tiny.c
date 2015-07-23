@@ -286,6 +286,11 @@ void *playback_tinyalsa(struct bat *bat)
 	} else {
 		printf("Playing input audio file: %s\n",
 				bat->playback.file);
+		bat->fp = fopen(bat->playback.file, "rb");
+		if (bat->fp == NULL) {
+			loge(E_OPENFILEC, "%s", bat->playback.file);
+			goto exit;
+		}
 	}
 
 	ret = play_sample(bat, &config);

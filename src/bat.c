@@ -32,22 +32,32 @@
 #include "convert.h"
 #include "analyze.h"
 
-static void get_duration(struct bat *bat)
+static int get_duration(struct bat *bat)
 {
 	float duration_f;
 	int duration_i;
 	char *ptrf, *ptri;
 
+	if (bat->narg == 0)
+		return 0;
+
 	duration_f = strtod(bat->narg, &ptrf);
 	duration_i = strtol(bat->narg, &ptri, 10);
+	if (duration_i < 0 || duration_i > MAX_NB_OF_FRAMES)
+		goto exit;
+
 	if (*ptrf == 's')
 		bat->frames = duration_f * bat->rate;
 	else if (*ptri == 0)
 		bat->frames = duration_i;
 	else {
 		loge(E_PARAMS, "for option -n");
-		exit(EXIT_FAILURE);
+		goto exit;
 	}
+	return 0;
+
+exit:
+	return -EINVAL;
 }
 
 static void get_sine_frequencies(struct bat *bat, char *freq)
@@ -63,20 +73,33 @@ static void get_sine_frequencies(struct bat *bat, char *freq)
 		bat->target_freq[1] = atof(tmp1 + 1);
 	}
 }
-static void get_tiny_format(char *alsa_device, unsigned int *tiny_card,
+static int get_tiny_format(char *alsa_device, unsigned int *tiny_card,
 		unsigned int *tiny_device)
 {
 	char *tmp1, *tmp2, *tmp3;
 
+	if (alsa_device == NULL) {
+		loge(E_PARAMS, "device name empty.");
+		return -EINVAL;
+	}
+
 	tmp1 = strchr(alsa_device, ':');
+	if (tmp1 == NULL)
+		goto exit;
 	tmp3 = tmp1 + 1;
 	tmp2 = strchr(tmp3, ',');
+	if (tmp2 == NULL)
+		goto exit;
 	tmp1 = tmp2 + 1;
 	*tiny_device = atoi(tmp1);
 	*tmp2 = '\0';
 	*tiny_card = atoi(tmp3);
 	*tmp2 = ',';
+	return 0;
 
+exit:
+	loge(E_PARAMS, "%s", alsa_device);
+	return -EINVAL;
 }
 
 static int thread_wait_completion(struct bat *bat, pthread_t id, int **val)
@@ -325,7 +348,7 @@ static void parse_arguments(struct bat *bat, int argc, char *argv[])
 	}
 }
 
-static void validate_options(struct bat *bat)
+static int validate_options(struct bat *bat)
 {
 	int c;
 	float freq_low, freq_high;
@@ -333,19 +356,19 @@ static void validate_options(struct bat *bat)
 	/* check we have an input file for local mode */
 	if ((bat->local == true) && (bat->capture.file == NULL)) {
 		loge(E_PARAMS, "no input file for local testing");
-		exit(EXIT_FAILURE);
+		goto exit;
 	}
 
 	/* check supported channels */
 	if (bat->channels > CHANNEL_MAX || bat->channels < CHANNEL_MIN) {
 		loge(E_PARAMS, "%d channels not supported", bat->channels);
-		exit(EXIT_FAILURE);
+		goto exit;
 	}
 
 	/* check single ended is in either playback or capture - not both */
 	if (bat->playback.single && bat->capture.single) {
 		loge(E_PARAMS, "single ended mode is simplex");
-		exit(EXIT_FAILURE);
+		goto exit;
 	}
 
 	/* check sine wave frequency range*/
@@ -357,18 +380,23 @@ static void validate_options(struct bat *bat)
 			loge(E_PARAMS,
 				"sine wave frequency out of range (%.1f, %.1f)",
 				freq_low, freq_high);
-			exit(EXIT_FAILURE);
+			goto exit;
 		}
 	}
+	return 0;
+
+exit:
+	return -EINVAL;
 }
 
-static void bat_init(struct bat *bat)
+static int bat_init(struct bat *bat)
 {
-	int ret;
+	int ret = 0;
 
 	/* Determine n */
-	if (bat->narg != 0)
-		get_duration(bat);
+	ret = get_duration(bat);
+	if (ret < 0)
+		return ret;
 
 	/* Determine capture file */
 	if (bat->local == true)
@@ -378,14 +406,20 @@ static void bat_init(struct bat *bat)
 
 	/* Determine tiny device if needed */
 	if (bat->tinyalsa == true) {
-		if (bat->playback.single == false)
-			get_tiny_format(bat->capture.device,
+		if (bat->playback.single == false) {
+			ret = get_tiny_format(bat->capture.device,
 					&bat->capture.card_tiny,
 					&bat->capture.device_tiny);
-		if (bat->capture.single == false)
-			get_tiny_format(bat->playback.device,
+			if (ret < 0)
+				return ret;
+		}
+		if (bat->capture.single == false) {
+			ret = get_tiny_format(bat->playback.device,
 					&bat->playback.card_tiny,
 					&bat->playback.device_tiny);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	if (bat->playback.file == NULL) {
@@ -413,11 +447,12 @@ static void bat_init(struct bat *bat)
 		bat->fp = fopen(bat->playback.file, "rb");
 		if (bat->fp == NULL) {
 			loge(E_OPENFILEP, "%s %d", bat->playback.file, -errno);
-			exit(EXIT_FAILURE);
+			ret = -EINVAL;
+			goto exit;
 		}
-		ret = read_wav_header(bat, bat->playback.file, false);
+		ret = read_wav_header(bat, bat->playback.file, bat->fp, false);
 		if (ret == -1)
-			exit(EXIT_FAILURE);
+			goto exit;
 	}
 
 	bat->frame_size = bat->sample_size * bat->channels;
@@ -441,10 +476,14 @@ static void bat_init(struct bat *bat)
 		bat->convert_sample_to_double = convert_int32_to_double;
 		break;
 	default:
-		loge(E_PARAMS S_PCMFORMAT, "%d", bat->sample_size);
-		exit(EXIT_FAILURE);
-		break;
+		loge(E_PARAMS S_PCMFORMAT, "size=%d", bat->sample_size);
+		ret = -EINVAL;
+		goto exit;
 	}
+exit:
+	if (bat->fp)
+		fclose(bat->fp);
+	return ret;
 }
 
 int main(int argc, char *argv[])
@@ -458,9 +497,13 @@ int main(int argc, char *argv[])
 
 	parse_arguments(&bat, argc, argv);
 
-	bat_init(&bat);
+	ret = bat_init(&bat);
+	if (ret < 0)
+		goto out;
 
-	validate_options(&bat);
+	ret = validate_options(&bat);
+	if (ret < 0)
+		goto out;
 
 	if (bat.playback.single) {
 		test_playback(&bat);

@@ -22,11 +22,12 @@
 #define WAV_WAVE			COMPOSE('W', 'A', 'V', 'E')
 #define WAV_FMT				COMPOSE('f', 'm', 't', ' ')
 #define WAV_DATA			COMPOSE('d', 'a', 't', 'a')
-#define WAV_FORMAT_PCM		1		/* PCM WAVE file encoding */
+#define WAV_FORMAT_PCM			1	/* PCM WAVE file encoding */
 
-#define MAX_NUMBER_OF_CHANNELS			2
-#define MAX_NB_OF_PEAK					10
-#define PLAYBACK_TIME_BEFORE_CAPTURE	500		/* Given in ms */
+#define MAX_NUMBER_OF_CHANNELS		2
+#define MAX_NB_OF_PEAK			10
+#define MAX_NB_OF_FRAMES		(10 * 1024 * 1024)
+#define PLAYBACK_TIME_BEFORE_CAPTURE	500	/* Given in ms */
 
 #define ENOPEAK				100
 #define EONLYDC				101
@@ -35,7 +36,7 @@
 #define DC_THRESHOLD			7.01
 
 #define FOUND_DC			(1<<1)
-#define FOUND_WRONG_PEAK	(1<<0)
+#define FOUND_WRONG_PEAK		(1<<0)
 
 #define CHANNEL_MAX			2
 #define CHANNEL_MIN			1
@@ -176,5 +177,5 @@ void close_file(FILE *);
 void destroy_mem(void *);
 
 void prepare_wav_info(struct wav_container *, struct bat *);
-int read_wav_header(struct bat *, char *, bool);
+int read_wav_header(struct bat *, char *, FILE *, bool);
 void generate_sine_wave(struct bat *, int , void *, int);
