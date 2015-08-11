@@ -50,23 +50,26 @@ int check_peak(struct bat *bat, struct analyze *a, int end, int peak, float hz,
 		float mean, float p, int channel, int start)
 {
 	int ret;
-	float hz_peak = ((float) (peak) + 1.0) * hz;
+	float hz_peak = (float) (peak) * hz;
+	float delta_rate = 0.005 * bat->target_freq[channel];
+	float delta_HZ = 1.0;
+	float tolerance = (delta_rate > delta_HZ) ? delta_rate : delta_HZ;
 
 	printf("Detected peak at %2.2f Hz of %2.2f dB\n", hz_peak,
 			10.0 * log10(a->mag[peak] / mean));
 	printf(" Total %3.1f dB from %2.2f to %2.2f Hz\n",
-			10.0 * log10(p / mean), (start + 1) * hz,
-			(end + 1) * hz);
+			10.0 * log10(p / mean), start * hz,
+			end * hz);
 
 	if (hz_peak < DC_THRESHOLD) {
 		fprintf(stdout,
 				" WARNING: Found low peak %2.2f Hz, very close to DC\n",
 				hz_peak);
 		ret = FOUND_DC;
-	} else if (hz_peak < bat->target_freq[channel] - 1.0) {
+	} else if (hz_peak < bat->target_freq[channel] - tolerance) {
 		printf(" FAIL: Peak freq too low %2.2f Hz\n", hz_peak);
 		ret = FOUND_WRONG_PEAK;
-	} else if (hz_peak > bat->target_freq[channel] + 1.0) {
+	} else if (hz_peak > bat->target_freq[channel] + tolerance) {
 		fprintf(stdout,
 				" FAIL: Peak freq too high %2.2f Hz\n",
 				hz_peak);
@@ -147,7 +150,7 @@ static void calc_magnitude(struct bat *bat, struct analyze *a, int N)
 
 	for (i = 1; i < N / 2; i++) {
 		r2 = a->out[i] * a->out[i];
-		i2 = a->out[N - i - 1] * a->out[N - i - 1];
+		i2 = a->out[N - i] * a->out[N - i];
 
 		a->mag[i] = sqrt(r2 + i2);
 	}
